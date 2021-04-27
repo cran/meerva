@@ -1,5 +1,5 @@
 #======================================================================================================
-#======= meerva.sim.brn_210412.R                                                               ========
+#======= meerva.sim.brn_210424.R                                                               ========
 #======================================================================================================
 #' Simulate logistic Regression Data with Measurement Errors in Outcome and Predictors 
 #'
@@ -86,15 +86,15 @@ meerva.sim.brn = function(n=4000, m=400, beta=c(-0.5, 0.5, 0.2, 1, 0.5),
                                   bx3s1=c(0, 0, -1, NA, 1)  , bx3s2 = c(NA, NA, 0.1), 
                                   fewer=0  ) {
 
-  x1 = rbinom(n, 1, 0.4)  # exposure group   ; # mean(x1) ; var(x1)
-  x2 = rbinom(n, 1, 0.8)  # race
-  x3 = rnorm (n)          # age, standardized   mean(x3)
-  x4 = rnorm (n)          # BMI, standardized
+  x1 = rbinom(n, 1, 0.25)  
+  x2 = rbinom(n, 1, 0.15)  
+  x3 = rnorm (n)          
+  x4 = rnorm (n)          
 
   x = cbind(x1,x2,x3,x4)
-  z = beta %*% t(cbind(1,x))
-  pr = 1/(1+exp(-z))     # logit probability
-  y = rbinom(n,1,pr)     # bernoulli response variable
+  xb = beta %*% t(cbind(1,x))
+  pr = 1/(1+exp(-xb))     # logistic probability
+  y = rbinom(n,1,pr)     # Bernoulli response variable
 
   pr_ys = alpha1[1] * ((x1==1) & (y==1)) + (1-alpha1[2]) * ((x1==1) & (y==0)) +
           alpha1[3] * ((x1==0) & (y==1)) + (1-alpha1[4]) * ((x1==0) & (y==0)) ;

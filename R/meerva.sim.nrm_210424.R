@@ -1,5 +1,5 @@
 #======================================================================================================
-#======= meerva.sim.nrm_210412.R                                                               ========
+#======= meerva.sim.nrm_210424.R                                                               ========
 #======================================================================================================
 #==========  normal data generating function  =======================================================
 #====================================================================================================
@@ -87,14 +87,14 @@ meerva.sim.nrm = function(n=4000, m=400, beta=c(-0.50, 0.5, 0.2, 1, 0.5),
                           bx3s1  = c( NA, NA,  NA, NA, NA), bx3s2 = c(NA, NA, NA),
                           sd=1, fewer=0 ) {
 
-  x1 = rbinom(n, 1, 0.4)  
-  x2 = rbinom(n, 1, 0.8)  
+  x1 = rbinom(n, 1, 0.25)  
+  x2 = rbinom(n, 1, 0.15)    
   x3 = rnorm (n)          
   x4 = rnorm (n)          
 
   x = cbind(x1,x2,x3,x4)
-  z = as.vector( beta[1:5] %*% t( cbind(1,x) ) )
-  y = z + sd * rnorm(n)  ;
+  xb = as.vector( beta[1:5] %*% t( cbind(1,x) ) )
+  y = xb + sd * rnorm(n)  ;
 
   if ( is.na(alpha1[1])    ) { alpha1[1] = 0 }
   if ( is.na(alpha1[2])    ) { alpha1[2] = 0 }
@@ -105,8 +105,8 @@ meerva.sim.nrm = function(n=4000, m=400, beta=c(-0.50, 0.5, 0.2, 1, 0.5),
   ye_sd = alpha1[2] * (x1==1)  + alpha1[4] * (x1==0)
   ys    = y + ye_m + ye_sd * rnorm(n)
 
-  pr_x1s = alpha2[1] * ((x1==1) & (y>=z)) + (1-alpha2[2] ) * ((x1==0) & (y>=z)) +
-           alpha2[3] * ((x1==1) & (y <z)) + (1-alpha2[4] ) * ((x1==0) & (y <z)) ;
+  pr_x1s = alpha2[1] * ((x1==1) & (y>=xb)) + (1-alpha2[2] ) * ((x1==0) & (y>=xb)) +
+           alpha2[3] * ((x1==1) & (y <xb)) + (1-alpha2[4] ) * ((x1==0) & (y <xb)) ;
   x1s = rbinom(n,1,pr_x1s)
 
   x3s1 = x3

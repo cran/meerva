@@ -1,5 +1,5 @@
 #======================================================================================================
-#======= meerva.sim.cox_210412.R                                                               ========
+#======= meerva.sim.cox_210424.R                                                               ========
 #======================================================================================================
 #' Simulate Cox Regression Data with Measurement Errors in Outcome and Predictors 
 #'
@@ -95,14 +95,14 @@ meerva.sim.cox = function(n=4000, m=400, beta=c(-0.5, 0.5, 0.2, 1.0, 0.5),
                           bx3s1  = c( NA, NA,  NA, NA, NA) , bx3s2 = c(NA,NA,NA), 
                           sd = 0, fewer=0 ) {
 
-  x1 = rbinom(n, 1, 0.4)  # exposure group   ; # mean(x1) ; var(x1)
-  x2 = rbinom(n, 1, 0.8)  # race
-  x3 = rnorm (n)          # age, standardized   mean(x3)
-  x4 = rnorm (n)          # BMI, standardized
+  x1 = rbinom(n, 1, 0.25)  
+  x2 = rbinom(n, 1, 0.15)    
+  x3 = rnorm (n)           
+  x4 = rnorm (n)           
   x = cbind(x1,x2,x3,x4)
-  z = as.vector( beta[1:5] %*% t( cbind(1,x) ) )          ## mean(z)
-  if (sd[1] != 0) { z = z + sd[1] * rnorm(n) }
-  y = rexp(n, exp(z))                                     ## mean(y)
+  xb = as.vector( beta[1:5] %*% t( cbind(1,x) ) )          ## mean(xb)
+  if (sd[1] != 0) { xb = xb + sd[1] * rnorm(n) }
+  y = rexp(n, exp(xb))                                     ## mean(y)
   ct = rexp(n, 0.3)  ## mean(c)
   ct = (ct < 3) * ct + (ct >= 3) * 3
   e = (y <= ct)

@@ -1,5 +1,5 @@
 #======================================================================================================
-#======= meerva.sim.tools_210412                                                               ========
+#======= meerva.sim.tools_210424                                                               ========
 #======================================================================================================
 #' Simulation of meerva used to Analyze Data with Measurement Error
 #' 
@@ -12,8 +12,9 @@
 #'  Measurement errors may be differential or non differential, in any or all 
 #'  predictors (simultaneously) as well as outcome.   
 #'       
-#' The meerva.sim.block lets the user specify a model with measurement error and
-#' simulate many datasets and examine the model fits to judge how the method works.
+#' The meerva.sim.block lets the user specify a model with measurement error, 
+#' and then simulate and analyze many datasets to 
+#' examine the model fits and judge how the method works.
 #' Data sets are generated according to 3 functions for simulating
 #' Cox PH, linear and logistic regression models.  These functions generate 
 #' data sets with 4 reference predictor variables and from 3 to 5 surrogate 
@@ -79,7 +80,7 @@
 #'@author Walter Kremers (kremers.walter@mayo.edu)
 #'
 #' @seealso
-#'    \code{\link{meerva.fit}} , \code{\link{meerva.sim.nrm}} , \code{\link{meerva.sim.brn}} , \code{\link{meerva.sim.cox}}
+#'    \code{\link{meerva.fit}} , \code{\link{meerva.sim.brn}} , \code{\link{meerva.sim.cox}} , \code{\link{meerva.sim.nrm}} 
 #'
 #' @return
 #' meerva.sim.block returns a list object of class meerva.sim.  
@@ -106,8 +107,8 @@
 #' sim.binomial = meerva.sim.block(simfam="binomial", 
 #'     nsims=10, seed=0, n=4000, m=400, 
 #'     beta = c(-0.5, 0.5, 0.2, 1, 0.5) , 
-#'     alpha1 = c(0.95, 0.90, 0.90, 0.95) , 
-#'     alpha2 = c(0.98,0.94,0.95,0.95) , 
+#'     alpha1 = c(0.95, 0.90, 0.90, 0.95), 
+#'     alpha2 = c(0.98,0.94,0.95,0.95), 
 #'     bx3s1=c(0.05, 0, 0, NA, NA) , 
 #'     bx3s2 = c(NA,NA,NA) , 
 #'     vmethod=2, jksize=0, compare=1) 
@@ -273,6 +274,7 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
 #'
 #' @param object Output object from the simulations study program meerva.sim.block
 #' @param short 0 to produce extensive output summary, 1 to produce only a table of biases and MSEs
+#' @param round number of decimal places to round to in some tables, NA for R default
 #' @param ... further arguments 
 #'
 #' @return A summary print 
@@ -280,9 +282,9 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
 #' @export
 #' 
 #' @seealso 
-#'   meerva.sim.block
+#'   \code{\link{meerva.sim.block}} 
 #'
-summary.meerva.sim <- function(object, short=0, ...) {
+summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   
   listnamex <-deparse(substitute(object))                          ## How to get object name ??
   simfam  = object$simfam    
@@ -511,7 +513,9 @@ summary.meerva.sim <- function(object, short=0, ...) {
 
   if ( (short==1)  &  (dim(biasbeta)[2] == dim(biasgamma)[2]) ) { 
     cat( "=========== Bias, SD and MSE for estimators ===================================================\n\n" )  
-    tabel = rbind(biasbeta, biasgamma, sdbeta, sdgamma, rmsebeta, rmsegamma) ;
+    if (!is.na(round)) { tabel = rbind(round(biasbeta,round), round(biasgamma,round), round(sdbeta,round),
+                                       round(sdgamma,round), round(rmsebeta,round), round(rmsegamma,round))  
+    } else { tabel = rbind(biasbeta, biasgamma, sdbeta, sdgamma, rmsebeta, rmsegamma) } 
     print(tabel) ; cat("\n") ; 
   } else if  (short==1)  { 
     cat( "=========== Bias, SD and MSE for estimators ===================================================\n\n" )  
@@ -750,6 +754,8 @@ plot.meerva.sim = function(x, violin=0, ...) {
             axis.text = ggplot2::element_text(size  = tsize, color = "black"), 
             axis.title = ggplot2::element_text(size = tsize),
             plot.title = ggplot2::element_text(size = tsize)) +
+      ggplot2::scale_fill_manual(values = c("blue", "darkgreen", "red"), name = "Model") +
+      ggplot2::guides(fill = ggplot2::guide_legend(label.theme = ggplot2::element_text(size = tsize))) +
       ggplot2::xlab("Coefficient") +
       ggplot2::ylab("Estimate - True") +
       ggplot2::ggtitle("Simultion results for augmented estimates")
@@ -763,6 +769,8 @@ plot.meerva.sim = function(x, violin=0, ...) {
                      axis.text = ggplot2::element_text(size  = tsize, color = "black"), 
                      axis.title = ggplot2::element_text(size = tsize),
                      plot.title = ggplot2::element_text(size = tsize)) +
+      ggplot2::scale_fill_manual(values = c("blue", "darkgreen", "red"), name = "Model") +
+      ggplot2::guides(fill = ggplot2::guide_legend(label.theme = ggplot2::element_text(size = tsize))) +
       ggplot2::xlab("Coefficient") +
       ggplot2::ylab("Estimate - True") +
       ggplot2::ggtitle("Simultion results for augmented estimates")

@@ -1,5 +1,5 @@
 #==========================================================================================================#
-#===== meerva_210412.R                                                                               ======#
+#===== meerva_210424.R                                                                               ======#
 #===== Analysis of MEasuremnt ERror data with VAlidation subsample                                   ======#
 #==========================================================================================================#
 #' Analysis of Data with Measurement Error Using a Validation Subsample
@@ -67,6 +67,7 @@
 #'   statement set.seed(seed) for some value of seed, and to get a "random" seed one can
 #'   first run the statement seed = round(runif(1)*1000000000) .
 #' @param compare 1 to compare gamma_val with gamma_ful (default) or 0 with gamma_non.
+#'   See below under "coef_gamma" for clarificaiton of gamma_ful and gamma_non.  
 #'   Comparisons of gamma_val with gamma_ful is consistent with the principle of the
 #'   validation set being a subsample of the entire dataset.  This assures the 
 #'   correlations between gamma_val and beta_val are representative of what
@@ -205,10 +206,10 @@
 #' @author Walter Kremers (kremers.walter@mayo.edu)
 #'
 #' @seealso
-#'   \code{\link{meerva.sim.block}} , \code{\link{meerva.sim.nrm}} , \code{\link{meerva.sim.brn}} , \code{\link{meerva.sim.cox}}
+#'   \code{\link{meerva.sim.block}} , \code{\link{meerva.sim.brn}} , \code{\link{meerva.sim.cox}} , \code{\link{meerva.sim.nrm}} 
 #'
 #' @references
-#'  Chen Y-H, Chen H.  A Unified Approach to Regression Analysis under Double-Sampling Designs.
+#'  Chen Y-H, Chen H. A Unified Approach to Regression Analysis under Double-Sampling Designs.
 #'  Journal of the Royal Statistical Society. Series B (Statistical Methodology) , 2000 (62) 449-460.
 #'
 #'  Chen Y-H. Cox regression in cohort studies with validation sampling.
@@ -280,6 +281,7 @@
 #'      bx3s2  = c(1.1, NA, NA) ,
 #'      sd=0.1)
 #'
+#' # Read the simulated data to input data format
 #' x_val  = simd$x_val
 #' y_val  = simd$y_val
 #' xs_val = simd$xs_val
@@ -290,6 +292,7 @@
 #' es_val = simd$es_val
 #' es_non = simd$es_non
 #'
+#' # Analyze the data
 #' cox.me = meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
 #'                     e_val, es_val, es_non)
 #' summary(cox.me)
@@ -483,16 +486,14 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
     #    print("Entering loop vmethod=2")
     x_val1  = cbind(1,x_val)
     xs_val1 = cbind(1,xs_val)
-#    xs_non1 = cbind(1,xs_non)
-    z_val  = x_val1  %*% beta_val
-    zs_val = xs_val1 %*% gamma_val
-#    zs_non = xs_non1 %*% gamma_non
+    xb_val  = x_val1  %*% beta_val
+    xbs_val = xs_val1 %*% gamma_val
     if (compare==1) {
       xs_ful1 = cbind(1,xs_ful)
-      zs_ful = xs_ful1 %*% gamma_ful
+      xbs_ful = xs_ful1 %*% gamma_ful
     }  else        {
       xs_non1 = cbind(1,xs_non)
-      zs_non = xs_non1 %*% gamma_non
+      xbs_non = xs_non1 %*% gamma_non
     }
 
     sigma  = matrix(0, nrow=dim_mod , ncol=dim_mod )
@@ -508,39 +509,36 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
 
     if (familyr == "binomial") {
       for (i in 1:n_val) {
-        dfbeta1[i,] = matrix(vcov_beta_val_naive %*% as.vector((y_val[i] - (1/(1+exp(-z_val[i] )))) %*% as.numeric(x_val1[i,])), nrow=1)
-        dfbeta2[i,] =        vcov_gamma_val_naive %*%  as.vector(  (ys_val[i] - (1/(1+exp(-zs_val[i])))) %*% as.numeric(xs_val1[i,]) )
+        dfbeta1[i,] = matrix(vcov_beta_val_naive  %*% as.vector( (y_val[i]  - (1/(1+exp(-xb_val[i] )))) %*% as.numeric(x_val1[i,] ) ), nrow=1)
+        dfbeta2[i,] =        vcov_gamma_val_naive %*% as.vector( (ys_val[i] - (1/(1+exp(-xbs_val[i])))) %*% as.numeric(xs_val1[i,]) )
         if (compare==1) {
-          dfbeta3val[i,] = vcov_gamma_ful_naive %*%  as.vector(  (ys_ful[i] - (1/(1+exp(-zs_ful[i])))) %*% as.numeric(xs_ful1[i,]) )
-          #          dfbeta2m[i,] = dfbeta2m[i,] - dfbeta4m[i,]
+          dfbeta3val[i,] = vcov_gamma_ful_naive %*% as.vector( (ys_ful[i] - (1/(1+exp(-xbs_ful[i])))) %*% as.numeric(xs_ful1[i,]) )
         }
       }
       for (i in 1:n_non) {
         if (compare==1) {
           i_ = n_val + i
-          dfbeta3non[i,]  = vcov_gamma_ful_naive %*% as.vector( (ys_ful[i_] - (1/(1+exp(-zs_ful[i_])))) %*% as.numeric(xs_ful1[i_,]) )
-#          dfbeta3non[i,]  = vcov_gamma_ful_naive %*%  as.vector( (ys_non[i_] - (1/(1+exp(-zs_non[i_])))) %*% as.numeric(xs_non1[i_,]) )
+          dfbeta3non[i,]  = vcov_gamma_ful_naive %*% as.vector( (ys_ful[i_] - (1/(1+exp(-xbs_ful[i_])))) %*% as.numeric(xs_ful1[i_,]) )
         } else {
-          dfbeta3non[i,]  = vcov_gamma_non_naive %*% as.vector( (ys_non[i ] - (1/(1+exp(-zs_non[i ])))) %*% as.numeric(xs_non1[i ,]) )
+          dfbeta3non[i,]  = vcov_gamma_non_naive %*% as.vector( (ys_non[i ] - (1/(1+exp(-xbs_non[i ])))) %*% as.numeric(xs_non1[i ,]) )
         }
       }
     } else if (familyr == "gaussian") {
-      vcovref_val = vcov_beta_val_naive  / var(ref_val$residuals)     ## update
+      vcovref_val = vcov_beta_val_naive  / var(ref_val$residuals)     
       vcovsur_val = vcov_gamma_val_naive / var(sur_val$residuals)
       if (compare==1) { vcovsur_ful = vcov_gamma_ful_naive / var(sur_ful$residuals)
       } else { vcovsur_non = vcov_gamma_non_naive / var(sur_non$residuals) }
       for (i in 1:n_val) {
-        dfbeta1[i,] = vcovref_val %*%  as.vector(  (y_val[i]  - z_val[i] ) %*% as.numeric(x_val1[i,] ) )
-        dfbeta2[i,] = vcovsur_val %*%  as.vector(  (ys_val[i] - zs_val[i]) %*% as.numeric(xs_val1[i,]) )
-        if (compare==1) { dfbeta3val[i,] = vcovsur_ful %*%  as.vector(  (ys_ful[i] - zs_ful[i]) %*% as.numeric(xs_ful1[i,]) ) }
+        dfbeta1[i,] = vcovref_val %*% as.vector( (y_val[i]  - xb_val[i] ) %*% as.numeric(x_val1[i,] ) )
+        dfbeta2[i,] = vcovsur_val %*% as.vector( (ys_val[i] - xbs_val[i]) %*% as.numeric(xs_val1[i,]) )
+        if (compare==1) { dfbeta3val[i,] = vcovsur_ful %*%  as.vector(  (ys_ful[i] - xbs_ful[i]) %*% as.numeric(xs_ful1[i,]) ) }
       }
       for (i in 1:n_non) {
         if (compare==1) {
-#          i_ = n_val + 1
           i_ = n_val + i
-          dfbeta3non[i,] = vcovsur_ful %*%  as.vector(  (ys_ful[i_] - zs_ful[i_]) %*% as.numeric(xs_ful1[i_,]) )
+          dfbeta3non[i,] = vcovsur_ful %*% as.vector( (ys_ful[i_] - xbs_ful[i_]) %*% as.numeric(xs_ful1[i_,]) )
         } else {
-          dfbeta3non[i,] = vcovsur_non %*%  as.vector(  (ys_non[i ] - zs_non[i ]) %*% as.numeric(xs_non1[i ,]) )
+          dfbeta3non[i,] = vcovsur_non %*% as.vector( (ys_non[i ] - xbs_non[i ]) %*% as.numeric(xs_non1[i ,]) )
         }
       }
     }
@@ -805,6 +803,34 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
 
 ################  END MAIN PROGRAM       #####################################################################################
 
+################  Auxilliary programs  #######################################################################################
+#' Ztest for beta coefficients 
+#'
+#' @param estimate beta estimates
+#' @param var variance of estimates
+#' @param names names of varaibles 
+#' @param alpha level for 91-alpha) confidence intervals 
+#' @param round number of decimal palces to rount some values 
+#'
+#' @return table of summary statistics 
+#'
+#' @importFrom stats qnorm pnorm 
+#'
+ztest = function(estimate, var, names, alpha=0.05, round=NA) { 
+  # estimate = object$coef_beta[1,] ; var=object$var_beta[1,] ; names = object$names_x ; alpha=0.05 ; round = round ; 
+  estimate = as.vector(estimate)
+  se = as.vector(sqrt(var))
+  lcl = estimate + qnorm(alpha/2) * se
+  ucl = estimate - qnorm(alpha/2) * se
+  z = estimate/se
+  p = 2*pnorm(-abs(z))
+  if (is.na(round)) { summary = cbind(estimate, se, lcl, ucl, z  , signif(p, 3) )
+  } else { summary = cbind(round(cbind(estimate, se, lcl, ucl, z), round) , signif(p, round-1) ) } 
+  rownames(summary) = names
+  print(summary) 
+  cat(paste0("\n"))
+}
+
 ################  BEGIN ANALYSIS SUMMARY TOOL     ############################################################################
 
 #' Summarize Information for a meerva Output Object
@@ -820,12 +846,12 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
 #'
 summary.meerva = function(object, ...) {
   compare= object$FitInput[2]
-
+  
   cat(paste0("\n"))
   print(object$Call) ; cat(paste0("\n"))
   print(object$FitInput) ; cat(paste0("\n"))
   #  cat(paste0(object$FitInput)) ; cat(paste0("\n"))
-
+  
   ztest = function(estimate, var, names, alpha=0.05) { # estimate = object$coef_beta[1,] ; var=object$var_beta[1,] ; names = object$names_x ;
     estimate = as.vector(estimate)
     se = as.vector(sqrt(var))
@@ -838,23 +864,23 @@ summary.meerva = function(object, ...) {
     print(summary)
     cat(paste0("\n"))
   }
-
+  
   cat(paste0(" Estimates for Beta using beta_aug (references augmented with surrogates)\n"))
   ztest(object$coef_beta[1,], object$var_beta[1,], object$names_x )
-
+  
   cat(paste0(" Estimates for Beta using beta_val (references alone\n"))
   ztest( object$coef_beta[2,], object$var_beta[2,], object$names_x )
-
+  
   cat(paste0(" Effective multiplicative increase in sample size by using augmented estimates\n"))
   Increase = object$var_beta[2,]/ object$var_beta[1,]
   print(Increase)
   cat("\n")
-
+  
   if (compare==1) { cat(paste0(" Estimates for Gamma using gamma_ful (surrogates alone)\n not for direct comparisons \n"))
   }   else        { cat(paste0(" Estimates for Gamma using gamma_non (surrogates alone)\n not for direct comparisons \n"))
   }
   ztest( object$coef_gamma[1,], object$var_gamma[1,], object$names_xs )
-
+  
   if (compare==1) { cat(paste0(" Correlations between beta_val and (gamma_val - gamma_ful)  \n"))
   }   else        { cat(paste0(" Correlations between beta_val and gamma_val \n"))
   }
@@ -879,12 +905,12 @@ summary.meerva = function(object, ...) {
 #'
 print.meerva = function(x, ...) {
   compare= x$FitInput[2]
-
+  
   cat(paste0("\n"))
   print(x$Call) ; cat(paste0("\n"))
   print(x$FitInput) ; cat(paste0("\n"))
   #  cat(paste0(x$FitInput)) ; cat(paste0("\n"))
-
+  
   ztest = function(estimate, var, names, alpha=0.05) { # estimate = x$coef_beta[1,] ; var=x$var_beta[1,] ; names = x$names_x ;
     estimate = as.vector(estimate)
     se = as.vector(sqrt(var))
@@ -957,7 +983,7 @@ dfbetac = function(id_vector, dfbeta) {
 #' @export
 #'
 #' @seealso
-#'  meerva.fit , meerva.sim.block , meerva.sim.nrm , meerva.sim.brn , meerva.sim.cox
+#'   \code{\link{meerva.fit}} , \code{\link{meerva.sim.block}} , \code{\link{meerva.sim.brn}} , \code{\link{meerva.sim.cox}} , \code{\link{meerva.sim.nrm}} 
 #'
 meerva = function() {
 cat("meerva is intended for future development and use as a wrapper \n") ;
