@@ -1,5 +1,5 @@
 #======================================================================================================
-#======= meerva.sim.cox_210424.R                                                               ========
+#======= meerva.sim.cox_210503.R                                                               ========
 #======================================================================================================
 #' Simulate Cox Regression Data with Measurement Errors in Outcome and Predictors 
 #'
@@ -7,19 +7,23 @@
 #' The meerva package is designed to analyze data with measurement error when there is a 
 #' validation subsample.  The merva.sim.cox function generates a simulated data set for the 
 #' Cox proportional hazards regression 
-#' setting demonstrating the data form expected for input to the meerva function, which is 
-#' able to analyze such data.  This program allows for two yes/no class predictors and 
-#' two quantitative predictors in the reference variable set.  In the surrogate variable set
-#' the yes/no event response variable may have a surrogate with differential measurement error.  
+#' setting demonstrating the data form expected for input to the meervad.fit function.
+#' This simulation function first generates 4 reference predictors based upon 
+#' a multivariate normal distribution, with variance-covariance specified by the 
+#' user.  The first two predictors are dichotomized to have probabilites specified 
+#' by the user.  This results in two class and two quantitative reference predictor 
+#' variables. 
+#' The yes/no event response variable may have a surrogate with 
+#' differential misclassification.  
 #' The time to event may have a surrogate measured with a multiplicative error.  
-#' Further
-#' there is one yes/no variable involving error in place of one of the yes/no reference 
-#' predictors, and one quantitative variable involving error in place of one of the 
-#' quantitative reference predictors.  The simulated data are not necessarily realistic, 
-#' but the method is able to handle different types of measurement error without the user 
+#' There is one yes/no surrogate predictor variable involving error in place of 
+#' one of the yes/no reference predictors, and one quantitative surrogate predictor 
+#' variable involving error in place of one of the quantitative reference predictors.  
+#' The simulated data are not necessarily realistic, but their analysis shows how 
+#' even with rather strong measurement error the method yields reasonable solutions.   
+#' The method is able to handle different types of measurement error without the user 
 #' having to specify any relationship between the reference variables measured without 
-#' error and the surrogate variables measured with error.
-#'    
+#' error and the surrogate variables measured with error.   
 #'
 #' @param n The full dataset size. 
 #' @param m The validation subsample size (m < n). 
@@ -57,6 +61,16 @@
 #'   variables.  If bx3s2 is specified such that there are 
 #'   duplicate surrogate variables for the reference variable x3 
 #'   then the number of surrogate predictors will not be reduced.
+#' @param bx12 Bernoulli probabilities for reference variables x1 and x2.  
+#'   A vector of length 2, default is c(0.25, 0.15).  If mncor (see below)
+#'   is positive the correlations between these Bernoulli and continuous
+#'   predictors remains positive.   
+#' @param mncor Correlation of the columns in the x matrix before 
+#'   x1 and x2 are dichotomized to Bernoulli random variables. 
+#'   Default is 0.
+#' @param sigma A 4x4 varaince-covarniance matrix for the 
+#'   multivarite normal dsitribution used to derive the 4 
+#'   reference predictor variables.  
 #'   
 #' @return meerva.sim.cox returns a list containing vectors and matrices 
 #'   which can be used as example input to the meerva.fit function.  
@@ -93,15 +107,27 @@
 meerva.sim.cox = function(n=4000, m=400, beta=c(-0.5, 0.5, 0.2, 1.0, 0.5), 
                           alpha1 = c(1, 1, 1, 1),  alpha2 = c(1, 1, 1, 1),
                           bx3s1  = c( NA, NA,  NA, NA, NA) , bx3s2 = c(NA,NA,NA), 
-                          sd = 0, fewer=0 ) {
+                          sd = 0, fewer=0 , bx12=c(0.25, 0.15), mncor=0, sigma=NULL ) {
 
-  x1 = rbinom(n, 1, 0.25)  
-  x2 = rbinom(n, 1, 0.15)    
-  x3 = rnorm (n)           
-  x4 = rnorm (n)           
-  x = cbind(x1,x2,x3,x4)
-  xb = as.vector( beta[1:5] %*% t( cbind(1,x) ) )          ## mean(xb)
-  if (sd[1] != 0) { xb = xb + sd[1] * rnorm(n) }
+  if (!is.null(sigma)) {
+    if (matrixcalc::is.positive.definite(sigma) == 0) {
+      print("Sigma is not positive definite and will be ignored.")
+      sgima = NULL 
+    }
+  }
+  if (is.null(sigma)) {
+    if (is.na(mncor)) { mncor = 0 }
+    mncor = min(1,max(mncor,0))
+    sigma = matrix(mncor, nrow=4, ncol=4)
+    diag(sigma) = c(1,1,1,1)
+  } 
+  x = mvtnorm::rmvnorm(n, mean=c(0,0,0,0), sigma=sigma) 
+  x[,1] = 1*(x[,1] >= qnorm(1-bx12[1]) )
+  x[,2] = 1*(x[,2] >= qnorm(1-bx12[2]) )
+  x1 = x[,1] ; x2 = x[,2] ; x3 = x[,3] ; x4 = x[,4]
+  xb = cbind(1,x) %*% beta
+  
+  if (sd != 0) { xb = xb + sd * rnorm(n) }
   y = rexp(n, exp(xb))                                     ## mean(y)
   ct = rexp(n, 0.3)  ## mean(c)
   ct = (ct < 3) * ct + (ct >= 3) * 3
@@ -133,7 +159,7 @@ meerva.sim.cox = function(n=4000, m=400, beta=c(-0.5, 0.5, 0.2, 1.0, 0.5),
     if ( (is.na(bx3s2[2]) == 0) & (is.na(bx3s2[3]) == 0) ) { x3s2 = bx3s2[2] * x3 + bx3s2[3] * rnorm(n) }
   }
 
-  temp <- ( sample(n, m) )    ; 
+  temp = sample(n, m) ; 
   id_val = temp[order(temp)]  ;  # id_val[1:10] 
   id_non = c(1:n)[-id_val]    ;  # id_non[1:20]
   

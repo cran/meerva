@@ -1,5 +1,5 @@
 #==========================================================================================================#
-#===== meerva_210424.R                                                                               ======#
+#===== meerva_210503.R                                                                               ======#
 #===== Analysis of MEasuremnt ERror data with VAlidation subsample                                   ======#
 #==========================================================================================================#
 #' Analysis of Data with Measurement Error Using a Validation Subsample
@@ -50,11 +50,19 @@
 #'   weights to achieve integers.  By using robust variance estimates meerva provides correct variance estimates.
 #' @param weights_non A vector object with weights used in model fit of the NON validation subsample.
 #'   This and weights_val, can be used, for example, to down weight records from patients with multiple records.
-#' @param familyr The family for the underlying regression model amongst "binomial", "gaussian" and "Cox".
-#'   If not specified the program chooses among these three based upon a simple data inspection. 
-#'   In principle, though not (yet) implemented here, the regression model for the reference variables may 
-#'   be of a different type than for the surrogate variables.  For example the reference outcome could be yes/no 
-#'   in nature while the surrogate outcome could be a numeric, and the method would continue to work.
+#' @param familyr The family for the underlying regression model 
+#'   amongst "binomial", "gaussian" and "Cox".  Default is NULL and the program 
+#'   chooses amongst these three based upon a simple data inspection. 
+#'   The regression model for the reference variables may 
+#'   be of a different type than for the surrogate variables.  
+#'   For example the reference outcome could be yes/no 
+#'   in nature while the surrogate outcome could be a numeric, 
+#'   and the method continues to work.
+#' @param familys The family for the underlying surrogate regression model if 
+#'   different from the reference model.  See familyr.  Default is NULL and 
+#'   familys takes the same form as for familyr, if specified.  If both familyr and 
+#'   familys are NULL then the program 
+#'   chooses from  "binomial", "gaussian" and "Cox" based upon a simple data inspection. 
 #' @param vmethod Method for robust estimation of variance covariance matrices needed for calculation of the augmented estimates (beta aug).
 #'   0, 1 or 2 determines JK (slow), IJK using dfbeta of glm or coxph, or IJK using an alternate formula for dfbeta.
 #'   Recommendations:  For "gaussian" use 1, for "Cox" use 1 for speed and 0 for accuracy,
@@ -301,40 +309,43 @@
 #'
 meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
                   e_val=NULL, es_val=NULL, es_non=NULL, id_val=NULL, id_non=NULL,
-                  weights_val=NULL, weights_non=NULL, familyr=NULL, vmethod=NULL, jksize=0, compare=1) {
+                  weights_val=NULL, weights_non=NULL, familyr=NULL, familys=NULL, vmethod=NULL, jksize=0, compare=1) {
 
   if ( is.null(familyr)) {familyr = NA}
+  if ( is.null(familys)) {familys = NA}
+  if ( is.na(familys)) { familys = familyr }
   if ( is.null(vmethod)) { vmethod = NA }
+  
   if ( is.na(familyr) & (!is.null(e_val)) ) { familyr = "Cox" }
   if ( !is.null(e_val) ) { familyr = "Cox" }
-  if ( is.na(familyr) & ( length(table(ys_non)) == 2 ) ) { familyr = "binomial" }
-  if ( is.na(familyr) & ( length(table(ys_non)) >  2 ) ) { familyr = "gaussian" }
+  if ( is.na(familyr) & ( length(table(y_val)) == 2 ) ) { familyr = "binomial" }
+  if ( is.na(familyr) & ( length(table(y_val)) >  2 ) ) { familyr = "gaussian" }
   if ( familyr == "poison" ) { familyr = "poisson" }
   if ( familyr %in% c("gausian", "gause", "normal") ) { familyr = "gaussian" }
   if ( familyr %in% c("COX", "cox", "coxph") ) { familyr = "Cox" }
-  if (is.null(vmethod) | (is.na(vmethod) )) {
-    if (familyr == "binomial" ) { vmethod = 2
-    } else                      { vmethod = 1
-    }
-  }
-  if (compare %in% c("ful", "full")) { compare = 1 } else if (compare=="non") { compare = 0 }
-  if ( ((familyr=="Cox")  &  (vmethod==2)) | ((familyr=="Cox")  &  (vmethod=="ijk")) ) {vmethod=1}
-  if (vmethod %in% c("dfbeta")) {vmethod=1} else if (vmethod %in% c("ijk")) {vmethod=2} else if (vmethod %in% c("jk")) {vmethod=0}
+
+  if ( is.na(familys) & (!is.null(es_val)) ) { familys = "Cox" }
+  if ( !is.null(es_val) ) { familys = "Cox" }
+  if ( is.na(familys) & ( length(table(ys_non)) == 2 ) ) { familys = "binomial" }
+  if ( is.na(familys) & ( length(table(ys_non)) >  2 ) ) { familys = "gaussian" }
+  if ( familys == "poison" ) { familys = "poisson" }
+  if ( familys %in% c("gausian", "gause", "normal") ) { familys = "gaussian" }
+  if ( familys %in% c("COX", "cox", "coxph") ) { familys = "Cox" }
   
-  if ((vmethod==2) & (!is.null(weights_val))) { 
-    vmethod=1 
-    print("Warning, when assigning weights vmethod=2 is changed to vmethod=1.") 
-  }
+  if (compare %in% c("ful", "full")) { compare = 1 } else if (compare=="non") { compare = 0 }
 
   ## get number of predictors for models, inclding intercepts
   if (familyr == "Cox") {
     if (is.vector(x_val))  { dim_mod  = 1
-    } else {                 dim_mod  = dim(x_val )[2] }        ## number of predictors for reference set
-    if (is.vector(xs_val)) { dim_mods = 1
-    } else {                 dim_mods = dim(xs_val)[2] }        ## number of predictors for surrogate set
+    } else {                 dim_mod  = dim(x_val )[2] }       
   } else {
     if (is.vector(x_val))  { dim_mod  = 2
     } else {                 dim_mod  = dim(x_val )[2] + 1 }
+  }
+  if (familys == "Cox") {
+    if (is.vector(xs_val)) { dim_mods = 1
+    } else {                 dim_mods = dim(xs_val)[2] }    
+  } else {
     if (is.vector(xs_val)) { dim_mods = 2
     } else {                 dim_mods = dim(xs_val)[2] + 1 }
   }
@@ -371,7 +382,7 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
   } else                                     { xs_ful = rbind(xs_val, xs_non)  }
   ys_ful = c(as.vector(ys_val), as.vector(ys_non) )
   if (!is.null(id_val))  {id_ful = c(as.vector(id_val), as.vector(id_non) ) }  ; # table(table(id_val))
-  if (familyr== "Cox") { es_ful  = c(as.vector(es_val), as.vector(es_non) ) }
+  if (familys== "Cox") { es_ful  = c(as.vector(es_val), as.vector(es_non) ) }
   if (!is.null(weights_non)) { weights_ful = c( as.vector(weights_val), as.vector(weights_non) )
   } else { weights_ful=NULL }
 
@@ -408,16 +419,19 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
   # model REFERENCE measurements from validation (set only)
   if (familyr == "Cox") {
     ref_val = survival::coxph(survival::Surv(y_val , e_val ) ~ x_val , weights=weights_val )
+  } else {
+    ref_val = glm(y_val  ~ x_val , weights=weights_val, family=familyr)         ######## your model statement here #######
+  }
+  if (familys == "Cox") {
     sur_val = survival::coxph(survival::Surv(ys_val, es_val) ~ xs_val, weights=weights_val )
     if (compare==1) { sur_ful = survival::coxph(survival::Surv(ys_ful, es_ful) ~ xs_ful, weights=weights_ful )
     }   else        { sur_non = survival::coxph(survival::Surv(ys_non, es_non) ~ xs_non, weights=weights_non ) }
   } else {
-    ref_val = glm(y_val  ~ x_val , weights=weights_val, family=familyr)         ######## your model statement here #######
-    sur_val = glm(ys_val ~ xs_val, weights=weights_val, family=familyr)         ###### and in other calls like this ######
-    if (compare==1) { sur_ful = glm(ys_ful ~ xs_ful, weights=weights_ful, family=familyr)
-    } else          { sur_non = glm(ys_non ~ xs_non, weights=weights_non, family=familyr) }
+    sur_val = glm(ys_val ~ xs_val, weights=weights_val, family=familys)         ###### and in other calls like this ######
+    if (compare==1) { sur_ful = glm(ys_ful ~ xs_ful, weights=weights_ful, family=familys)
+    } else          { sur_non = glm(ys_non ~ xs_non, weights=weights_non, family=familys) }
   }
-
+  
   # stats for reference from validation dataset
   beta_val      = ref_val$coefficients
   vcov_beta_val_naive = vcov(ref_val)
@@ -441,140 +455,167 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
     gamma_big = gamma_non
   }
 
+  if (is.na(vmethod)) {
+    vmethod = 9 
+    if (familyr %in% c("binomial")) { vmethodr = 2 
+    } else { vmethodr = 1 }
+    if (familys %in% c("binomial")) { vmethods = 2 
+    } else { vmethods = 1 }
+  }
+  
+  if ( !(familyr %in% c("binomial","gaussian"))  & ((vmethod==2) | (vmethod=="ijk")) ) { vmethod = 1 
+  } else if (vmethod %in% c("dfbeta")) { vmethod = 1
+  } else if (vmethod %in% c("ijk"))    { vmethod = 2
+  } else if (vmethod %in% c("jk"))     { vmethod = 0 }
+  
+  if (vmethod == 0) { 
+    vmethodr = 0  
+    vmethods = 0 
+  } else if (vmethod == 1) { 
+    vmethodr = 1  
+    vmethods = 1 
+  } else if (vmethod == 2) {
+    vmethodr = 2  
+    vmethods = 2 
+  }
+  
+  if ((vmethod==2) & (!is.null(weights_val))) { vmethod=1 
+    print("Warning, when assigning weights vmethod=2 is changed to vmethod=1.") }
+  
+  if ((vmethodr==2) & (!is.null(weights_val))) { vmethodr=1 
+    print("Warning, when assigning weights vmethodr=2 is changed to vmethodr=1.") }  
+  
+  if ((vmethods==2) & (!is.null(weights_val))) { vmethods=1 
+    print("Warning, when assigning weights vmethods=2 is changed to vmethods=1.") } 
+
   #====== estimates for sigma, omega, kappa and vcov(gamma_ful)  =============================================#
   #------ i.e. vcov  beta_val, (gamma_val - gamma_ful) and gamma_ful -----------------------------------------#
 
-  if  ( (familyr %in% c("binomial", "gaussian", "Cox"))  & (vmethod == 1) )  {
-    #====== using fdbeta (beta influence) ====================================================================#
-    #    print("Entering loop vmethod=1")
-    if (familyr == "Cox") {
-      dfbeta1 = residuals(ref_val,  type="dfbeta")
-      dfbeta2 = residuals(sur_val,  type="dfbeta")
-      if (compare==1) { dfbeta3 = residuals(sur_ful,  type="dfbeta") } else {dfbeta3 = residuals(sur_non,  type="dfbeta")  }
-    } else {
-      dfbeta1 = dfbeta(ref_val)
-      dfbeta2 = dfbeta(sur_val)
-      if (compare==1) { dfbeta3 = dfbeta(sur_ful) } else { dfbeta3 = dfbeta(sur_non) }
+  if  ( vmethodr %in% c(1,2) )  {
+    
+    #====== dfbeta (beta influence) ====================================================================#
+    #-----------------------------------------------------------------------------------
+    if (vmethodr == 1) {
+      if (familyr == "Cox") { dfbeta1 = residuals(ref_val,  type="dfbeta") 
+      } else { dfbeta1 = dfbeta(ref_val) }
+    } 
+    
+    if (vmethods == 1) {
+      if (familys == "Cox") {
+        dfbeta2 = residuals(sur_val,  type="dfbeta")
+        if (compare==1) { dfbeta3 = residuals(sur_ful,  type="dfbeta") } else {dfbeta3 = residuals(sur_non,  type="dfbeta")  }
+      } else {
+        dfbeta2 = dfbeta(sur_val)
+        if (compare==1) { dfbeta3 = dfbeta(sur_ful) } else { dfbeta3 = dfbeta(sur_non) }
+      }
+    } 
+    
+    #======= using formula to estimate beta influence =============================================================#
+    
+    #-----------------------------------------------------------------------------------
+    if (vmethodr == 2 ) {
+      x_val1  = cbind(1,x_val)
+      xb_val  = x_val1  %*% beta_val
+      dfbeta1 = matrix(0,nrow=dim(x_val)[1] ,ncol=dim(x_val1)[2])
+      if (familyr == "binomial") {
+        for (i in 1:n_val) {
+          dfbeta1[i,] = matrix(vcov_beta_val_naive  %*% as.vector( (y_val[i]  - (1/(1+exp(-xb_val[i] )))) %*% x_val1[i,] ), nrow=1)
+        }
+      } else if (familyr == "gaussian") {
+        vcovref_val = vcov_beta_val_naive  / var(ref_val$residuals)     
+        for (i in 1:n_val) {
+          dfbeta1[i,] = vcovref_val %*% as.vector( (y_val[i]  - xb_val[i] ) %*% x_val1[i,] )
+        }
+      }
     }
+    
+    #-----------------------------------------------------------------------------------
+    if (vmethods == 2 ) {
+      
+      xs_val1 = cbind(1,xs_val)
+      xbs_val = xs_val1 %*% gamma_val
+      if (compare==1) {
+        xs_ful1 = cbind(1,xs_ful)
+        xbs_ful = xs_ful1 %*% gamma_ful
+      }  else        {
+        xs_non1 = cbind(1,xs_non)
+        xbs_non = xs_non1 %*% gamma_non
+      }
+      
+      dfbeta2 = matrix(0,nrow=dim(xs_val)[1],ncol=dim(xs_val1)[2])         # dim(dfbeta2)
+      dfbeta3val = matrix(0,nrow=dim(xs_val)[1],ncol=dim(xs_val1)[2])      # dim(dfbeta1m)
+      dfbeta3non = matrix(0,nrow=n_non, ncol=dim(xs_val1)[2])      
+      
+      if (familys == "binomial") {
+        for (i in 1:n_val) {
+         dfbeta2[i,] =        vcov_gamma_val_naive %*% as.vector( (ys_val[i] - (1/(1+exp(-xbs_val[i])))) %*% xs_val1[i,] )
+          if (compare==1) {
+            dfbeta3val[i,] = vcov_gamma_ful_naive %*% as.vector( (ys_ful[i] - (1/(1+exp(-xbs_ful[i])))) %*% xs_ful1[i,] )
+          }
+        }
+        for (i in 1:n_non) {
+           if (compare==1) {
+            i_ = n_val + i
+            dfbeta3non[i,]  = vcov_gamma_ful_naive %*% as.vector( (ys_ful[i_] - (1/(1+exp(-xbs_ful[i_])))) %*% xs_ful1[i_,] )
+          } else {
+            dfbeta3non[i,]  = vcov_gamma_non_naive %*% as.vector( (ys_non[i ] - (1/(1+exp(-xbs_non[i ])))) %*% xs_non1[i ,] )
+          }
+        }
+      } else if (familys == "gaussian") {
+        vcovsur_val = vcov_gamma_val_naive / var(sur_val$residuals)
+        if (compare==1) { vcovsur_ful = vcov_gamma_ful_naive / var(sur_ful$residuals)
+        } else { vcovsur_non = vcov_gamma_non_naive / var(sur_non$residuals) }
+        for (i in 1:n_val) {
+          dfbeta2[i,] = vcovsur_val %*% as.vector( (ys_val[i] - xbs_val[i]) %*% xs_val1[i,] )
+          if (compare==1) { dfbeta3val[i,] = vcovsur_ful %*%  as.vector(  (ys_ful[i] - xbs_ful[i]) %*% xs_ful1[i,] ) }
+        }
+        for (i in 1:n_non) {
+          if (compare==1) {
+            i_ = n_val + i
+            dfbeta3non[i,] = vcovsur_ful %*% as.vector( (ys_ful[i_] - xbs_ful[i_]) %*% xs_ful1[i_,] )
+          } else {
+            dfbeta3non[i,] = vcovsur_non %*% as.vector( (ys_non[i ] - xbs_non[i ]) %*% xs_non1[i ,] )
+          }
+        }
+      }    
+    
+    if (compare==1) { dfbeta3 = rbind(dfbeta3val, dfbeta3non)
+    } else { dfbeta3 = dfbeta3non }
+    } 
+    
+    #=========================
+    
     if (!is.null(id_val)) {
       dfbeta1 = dfbetac(id_val_u, dfbeta1)
       dfbeta2 = dfbetac(id_val_u, dfbeta2)
       if (compare==1) {dfbeta3 = dfbetac(id_ful_u, dfbeta3 )              # dim(dfbeta3)
       } else          {dfbeta3 = dfbetac(id_non_u, dfbeta3) }
     }
+    
     if (compare==1) {
       dfbeta3val   = dfbeta3[1:dim(dfbeta2)[1], ]                         # dim(dfbeta2) ; dim(dfbeta3val)
       dfbeta3non   = dfbeta3[(dim(dfbeta2)[1]+1):dim(dfbeta3)[1], ]       # dim(dfbeta3non) ; dim(dfbeta3)
-      gammadiffval = dfbeta2 - dfbeta3val                                 # dim(dfbata2) ; dim(dfbeta3val ) # dim( gammadiffval )
-      gammadiff    = rbind(gammadiffval, -dfbeta3non)                     #  t(a - t(b))     ; # dim(gammadiff)
-      omega  = t(dfbeta1)   %*% gammadiffval - as.matrix(colMeans(dfbeta1  )) %*% colMeans(gammadiffval)
-      kappa  = t(gammadiff) %*% gammadiff    - as.matrix(colMeans(gammadiff)) %*% colMeans(gammadiff   )
-      kappa_val = t(gammadiffval) %*% gammadiffval - as.matrix(colMeans(gammadiffval)) %*% colMeans(gammadiffval)
-    } else {
-      omega  = t(dfbeta1) %*% dfbeta2 - as.matrix(colMeans(dfbeta1)) %*% colMeans(dfbeta2)
-      kappa_val = t(dfbeta2) %*% dfbeta2 - as.matrix(colMeans(dfbeta2)) %*% colMeans(dfbeta2)
-      kappa_non = t(dfbeta3) %*% dfbeta3 - as.matrix(colMeans(dfbeta3)) %*% colMeans(dfbeta3)
-      kappa  = kappa_non + kappa_val
     }
-    sigma     = t(dfbeta1) %*% dfbeta1 - as.matrix(colMeans(dfbeta1)) %*% colMeans(dfbeta1)
-    sigma_gam = t(dfbeta3) %*% dfbeta3 - as.matrix(colMeans(dfbeta3)) %*% colMeans(dfbeta3)
-    sdb = sqrt(diag(sigma))  ;  sdd = sqrt(diag(kappa_val)) ;  omega_cor = t(t( omega / sdb ) / sdd )
-    if (compare==1) { vcov_gamma_ful = sigma_gam } else { vcov_gamma_non = sigma_gam }
-
-  } else if ( (familyr %in% c("binomial", "gaussian")) & (vmethod==2)) {
-    #======= using formula to estimate beta influence =============================================================#
-    #    print("Entering loop vmethod=2")
-    x_val1  = cbind(1,x_val)
-    xs_val1 = cbind(1,xs_val)
-    xb_val  = x_val1  %*% beta_val
-    xbs_val = xs_val1 %*% gamma_val
-    if (compare==1) {
-      xs_ful1 = cbind(1,xs_ful)
-      xbs_ful = xs_ful1 %*% gamma_ful
-    }  else        {
-      xs_non1 = cbind(1,xs_non)
-      xbs_non = xs_non1 %*% gamma_non
-    }
-
-    sigma  = matrix(0, nrow=dim_mod , ncol=dim_mod )
-    omega  = matrix(0, nrow=dim_mod , ncol=dim_mods)
-    kappa  = matrix(0, nrow=dim_mods, ncol=dim_mods)
-    kappa_val = matrix(0, nrow=dim_mods, ncol=dim_mods)
-    kappa_non = matrix(0, nrow=dim_mods, ncol=dim_mods)
-    sigma_gam = matrix(0, nrow=dim_mods, ncol=dim_mods)
-    dfbeta1 = matrix(0,nrow=dim(x_val)[1] ,ncol=dim(x_val1)[2])
-    dfbeta2 = matrix(0,nrow=dim(xs_val)[1],ncol=dim(xs_val1)[2])         # dim(dfbeta2)
-    dfbeta3val = matrix(0,nrow=dim(xs_val)[1],ncol=dim(xs_val1)[2])      # dim(dfbeta1m)
-    dfbeta3non = matrix(0,nrow=n_non, ncol=dim(xs_val1)[2])
-
-    if (familyr == "binomial") {
-      for (i in 1:n_val) {
-        dfbeta1[i,] = matrix(vcov_beta_val_naive  %*% as.vector( (y_val[i]  - (1/(1+exp(-xb_val[i] )))) %*% as.numeric(x_val1[i,] ) ), nrow=1)
-        dfbeta2[i,] =        vcov_gamma_val_naive %*% as.vector( (ys_val[i] - (1/(1+exp(-xbs_val[i])))) %*% as.numeric(xs_val1[i,]) )
-        if (compare==1) {
-          dfbeta3val[i,] = vcov_gamma_ful_naive %*% as.vector( (ys_ful[i] - (1/(1+exp(-xbs_ful[i])))) %*% as.numeric(xs_ful1[i,]) )
-        }
-      }
-      for (i in 1:n_non) {
-        if (compare==1) {
-          i_ = n_val + i
-          dfbeta3non[i,]  = vcov_gamma_ful_naive %*% as.vector( (ys_ful[i_] - (1/(1+exp(-xbs_ful[i_])))) %*% as.numeric(xs_ful1[i_,]) )
-        } else {
-          dfbeta3non[i,]  = vcov_gamma_non_naive %*% as.vector( (ys_non[i ] - (1/(1+exp(-xbs_non[i ])))) %*% as.numeric(xs_non1[i ,]) )
-        }
-      }
-    } else if (familyr == "gaussian") {
-      vcovref_val = vcov_beta_val_naive  / var(ref_val$residuals)     
-      vcovsur_val = vcov_gamma_val_naive / var(sur_val$residuals)
-      if (compare==1) { vcovsur_ful = vcov_gamma_ful_naive / var(sur_ful$residuals)
-      } else { vcovsur_non = vcov_gamma_non_naive / var(sur_non$residuals) }
-      for (i in 1:n_val) {
-        dfbeta1[i,] = vcovref_val %*% as.vector( (y_val[i]  - xb_val[i] ) %*% as.numeric(x_val1[i,] ) )
-        dfbeta2[i,] = vcovsur_val %*% as.vector( (ys_val[i] - xbs_val[i]) %*% as.numeric(xs_val1[i,]) )
-        if (compare==1) { dfbeta3val[i,] = vcovsur_ful %*%  as.vector(  (ys_ful[i] - xbs_ful[i]) %*% as.numeric(xs_ful1[i,]) ) }
-      }
-      for (i in 1:n_non) {
-        if (compare==1) {
-          i_ = n_val + i
-          dfbeta3non[i,] = vcovsur_ful %*% as.vector( (ys_ful[i_] - xbs_ful[i_]) %*% as.numeric(xs_ful1[i_,]) )
-        } else {
-          dfbeta3non[i,] = vcovsur_non %*% as.vector( (ys_non[i ] - xbs_non[i ]) %*% as.numeric(xs_non1[i ,]) )
-        }
-      }
-    }
-
-    if (compare==1) { dfbeta3 = rbind(dfbeta3val, dfbeta3non)
-    } else { dfbeta3 = dfbeta3non }
-
-    if (!is.null(id_val)) {
-      dfbeta1 = dfbetac(id_val_u, dfbeta1)
-      dfbeta2 = dfbetac(id_val_u, dfbeta2)
-      dfbeta3val = dfbetac(id_val_u, dfbeta3val)
-      dfbeta3non = dfbetac(id_non_u, dfbeta3non)
-      if (compare==1) { dfbeta3 = dfbetac(id_ful_u, dfbeta3)
-      } else { dfbeta3 = dfbetac(id_non_u, dfbeta3)  }
-    }
-
-    sigma  = t(dfbeta1) %*% dfbeta1  -  as.matrix(colMeans(dfbeta1)) %*% colMeans(dfbeta1)
+    
     if (compare==1) {
       gammadiffval = dfbeta2 - dfbeta3val
       gammadiff    = rbind(gammadiffval, -dfbeta3non)
       omega  = t(dfbeta1)   %*% gammadiffval - as.matrix(colMeans(dfbeta1  )) %*% colMeans(gammadiffval)
       kappa     = t(gammadiff   ) %*% gammadiff    - as.matrix(colMeans(gammadiff   )) %*% colMeans(gammadiff   )
       kappa_val = t(gammadiffval) %*% gammadiffval - as.matrix(colMeans(gammadiffval)) %*% colMeans(gammadiffval)
-      vcov_gamma_ful = t(dfbeta3) %*% dfbeta3 - as.matrix(colMeans(dfbeta3)) %*% colMeans(dfbeta3)
     }  else {
       omega  = t(dfbeta1) %*% dfbeta2 - as.matrix(colMeans(dfbeta1)) %*% colMeans(dfbeta2)
       kappa_val = t(dfbeta2) %*% dfbeta2 - as.matrix(colMeans(dfbeta2)) %*% colMeans(dfbeta2)
       kappa_non = t(dfbeta3non) %*% dfbeta3non - as.matrix(colMeans(dfbeta3non)) %*% colMeans(dfbeta3non)
       kappa  = kappa_non + kappa_val
-      vcov_gamma_non = kappa_non
     }
-    sigma_gam = t(dfbeta3) %*% dfbeta3 - as.matrix(colMeans(dfbeta3)) %*% colMeans(dfbeta3)
+    sigma  = t(dfbeta1) %*% dfbeta1  -  as.matrix(colMeans(dfbeta1)) %*% colMeans(dfbeta1)    
+    sigma_gam  = t(dfbeta3) %*% dfbeta3 - as.matrix(colMeans(dfbeta3)) %*% colMeans(dfbeta3)
     sdb = sqrt(diag(sigma))  ;  sdd = sqrt(diag(kappa_val)) ;  omega_cor = t(t( omega / sdb ) / sdd )
+    if (compare==1) { vcov_gamma_ful = sigma_gam } else { vcov_gamma_non = sigma_gam }
   } else {
     #====== using JK -- slowest but most generally applicable to different models =================================#
-    if (familyr== "Cox") {coxcontrol = survival::coxph.control() }
+    if ((familyr == "Cox") | (familys == "Cox")) {coxcontrol = survival::coxph.control() }
     glmcontrol = glm.control()
 
     #------ Jackknife val data ------------------------------------------------------------------------------------#
@@ -592,45 +633,73 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
       if( !is.null(weights_non) ) { weights_ful_j = c( weights_val_j , weights_non )
       } else { weights_ful_j = NULL }
 
+      #---------------------------------------------------------------
       if (familyr == "Cox") {
         e_val_j   = e_val [ -index_LO ]
-        es_val_j  = es_val[ -index_LO ]
-        es_ful_j  = c( es_val_j, es_non )      # length(es_ful_j)
         ref_val_j = survival::coxph.fit(x_val_j ,cbind( y_val_j,  e_val_j) , weights=weights_val_j, strata=NULL, init=beta_val ,
                               control=coxcontrol, method="efron", rownames=NULL)
+      } 
+      
+      if (familys == "Cox") {
+        es_val_j  = es_val[ -index_LO ]
         sur_val_j = survival::coxph.fit(xs_val_j,cbind(ys_val_j, es_val_j) , weights=weights_val_j, strata=NULL, init=gamma_val,
-                              control=coxcontrol, method="efron", rownames=NULL)
-        if (compare==1) { sur_ful_j = survival::coxph.fit(xs_ful_j,cbind(ys_ful_j, es_ful_j) , weights=weights_ful_j, strata=NULL,
-                                                init=gamma_ful, control=coxcontrol, method="efron", rownames=NULL) }
-      } else if ( (familyr == "gaussian") & (vmethod == 0) ) {
+                                        control=coxcontrol, method="efron", rownames=NULL)
+        if (compare==1) { 
+          es_ful_j  = c( es_val_j, es_non )      # length(es_ful_j)
+          sur_ful_j = survival::coxph.fit(xs_ful_j,cbind(ys_ful_j, es_ful_j) , weights=weights_ful_j, strata=NULL,
+                                          init=gamma_ful, control=coxcontrol, method="efron", rownames=NULL) 
+        }
+      } 
+      
+      #---------------------------------------------------------------  
+      if ( (familyr == "gaussian") & (vmethod == 0) ) {
         x_val_j1   = cbind(1, x_val_j )
+        if (is.null(weights_val)) {
+          ref_val_j = list( coefficients = solve(t(x_val_j1 ) %*% x_val_j1 ) %*% t(x_val_j1 ) %*% y_val_j  )
+        } else {
+          ref_val_j = glm.fit(x_val_j1 , y_val_j , weights=weights_val_j, family = gaussian(), control = glmcontrol)  ## why not family=familyr ??
+        }
+      } 
+      
+      if ( (familys == "gaussian") & (vmethod == 0) ) {
         xs_val_j1  = cbind(1, xs_val_j)
         xs_ful_j1  = cbind(1, xs_ful_j)
         if (is.null(weights_val)) {
-          ref_val_j = list( coefficients = solve(t(x_val_j1 ) %*% x_val_j1 ) %*% t(x_val_j1 ) %*% y_val_j  )
           sur_val_j = list( coefficients = solve(t(xs_val_j1) %*% xs_val_j1) %*% t(xs_val_j1) %*% ys_val_j )
           if (compare==1) { sur_ful_j = list( coefficients = solve(t(xs_ful_j1) %*% xs_ful_j1) %*% t(xs_ful_j1) %*% ys_ful_j ) }
         } else {
-          ref_val_j = glm.fit(x_val_j1 , y_val_j , weights=weights_val_j, family = gaussian(), control = glmcontrol)  ## why not family=familyr ??
           sur_val_j = glm.fit(xs_val_j1, ys_val_j, weights=weights_val_j, family = gaussian(), control = glmcontrol)
           if (compare==1) { sur_ful_j = glm.fit(xs_ful_j1, ys_ful_j,weights=weights_ful_j,family=gaussian(),control=glmcontrol) }
         }
-      } else if ( familyr == "binomial" ) {
+      } 
+      
+      #---------------------------------------------------------------  
+      if ( familyr == "binomial" ) {
         x_val_j1   = cbind(1, x_val_j )
-        xs_val_j1  = cbind(1, xs_val_j)
-        xs_ful_j1  = cbind(1, xs_ful_j)
         ref_val_j = glm.fit(x_val_j1 , y_val_j , start = beta_val , weights=weights_val_j, family = binomial(link = "logit"),
                             control = glmcontrol)
+      }  
+      
+      if ( familys == "binomial" ) {
+        xs_val_j1  = cbind(1, xs_val_j)
+        xs_ful_j1  = cbind(1, xs_ful_j)
         sur_val_j = glm.fit(xs_val_j1, ys_val_j, start = gamma_val, weights=weights_val_j, family = binomial(link = "logit"),
                             control = glmcontrol)
         if (compare==1) { sur_ful_j = glm.fit(xs_ful_j1, ys_ful_j, weights=weights_ful_j, start = gamma_ful,
-                                               family = binomial(link = "logit"), control = glmcontrol) }
-      }  else {
+                                              family = binomial(link = "logit"), control = glmcontrol) }
+      }
+      
+      #---------------------------------------------------------------  
+      if (!(familyr %in% c("binomial", "Cox", "gaussian"))) {
         ref_val_j = glm(y_val_j  ~ x_val_j , weights=weights_val_j, start = beta_val , family=familyr)
+      }
+
+      if (!(familys %in% c("binomial", "Cox", "gaussian"))) {
         sur_val_j = glm(ys_val_j ~ xs_val_j, weights=weights_val_j, start = gamma_val, family=familyr)
         if (compare==1) { sur_ful_j = glm(ys_ful_j ~ xs_ful_j, weights=weights_ful_j, start = gamma_ful, family=familyr) }
       }
-
+      
+      #=========================
       beta_val_j  = ref_val_j$coefficients
       gamma_val_j = sur_val_j$coefficients
       if (compare==1) { gamma_ful_j = sur_ful_j$coefficients }
@@ -664,47 +733,47 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
         drop    = c(1:n_non)[id_non_u %in% index_LO_i]             # drop list
         ys_non_j = ys_non[-drop]
         xs_non_j = xs_non[-drop,]
-        if (familyr=="Cox") { es_non_j = es_non[-drop] }
+        if (familys=="Cox") { es_non_j = es_non[-drop] }
         if( !is.null(weights_non) ) { weights_non_j = weights_non[-drop] }
       } else {                                ## CHECK to define id_non_u when is.null(id_non)==TRUE
         ys_non_j = ys_non[ (index_LO != i_) ]     ; length(ys_non_j)
         xs_non_j = xs_non[ (index_LO != i_), ]    ; dim(xs_non_j)
-        if (familyr == "Cox") { es_non_j = es_non[(index_LO != i_)] }
+        if (familys == "Cox") { es_non_j = es_non[(index_LO != i_)] }
         if( !is.null(weights_non) ) { weights_non_j = weights_non[ (index_LO != i_) ] }
       }
 
-      if (compare==1) {                        # Compare Bval with Gval-Gful
+      if (compare==1) {                        # Compare Beta_val with Gamma_val - Gamma_ful
         xs_big_j = rbind(xs_val, xs_non_j)
         ys_big_j = c(as.vector(ys_val), as.vector(ys_non_j) )
-        if (familyr == "Cox") { es_big_j = c(as.vector(es_val), as.vector(es_non_j) ) }
+        if (familys == "Cox") { es_big_j = c(as.vector(es_val), as.vector(es_non_j) ) }
         if( !is.null(weights_non) ) { weights_big_j = c( as.vector(weights_val), as.vector(weights_non_j) )
         } else { weights_big_j = NULL }
-      } else {                                # Compare Bval with Gval-Gnon
+      } else {                                 # Compare Beta_val with Gamma_val - Gamma_non
         xs_big_j = xs_non_j
         ys_big_j = ys_non_j
-        if (familyr == "Cox") { es_big_j = es_non_j }
+        if (familys == "Cox") { es_big_j = es_non_j }
         if( !is.null(weights_non) ) { weights_big_j = as.vector(weights_non_j)
         } else { weights_big_j = NULL }
       }
       ## dim(xs_val) ; dim(xs_non_j) ; dim(xs_big_j)
 
-      if (familyr == "Cox") {
+      if (familys == "Cox") {
         if (vmethod == 0)  {sur_big_j = survival::coxph.fit(xs_big_j,cbind(ys_big_j, es_big_j) , weights=weights_big_j, strata=NULL,
                                                init=gamma_big, control=coxcontrol, method="efron", rownames=NULL)
         } else { sur_big_j = survival::coxph(survival::Surv(ys_big_j, es_big_j) ~ xs_big_j , weights=weights_big_j, init=gamma_big )
         }
-      } else if ((familyr == "gaussian") & (vmethod==0)) {
+      } else if ((familys == "gaussian") & (vmethod==0)) {
         xs_big_j1 = cbind(1, xs_big_j)    ; dim(xs_big_j) ; xs_big_j1[1:25,]
         if (is.null(weights_non)) {
           sur_big_j = list( coefficients = solve(t(xs_big_j1) %*% xs_big_j1) %*% t(xs_big_j1) %*% ys_big_j )
         } else {
-          glm.fit(xs_big_j1, ys_big_j, weights=weights_big_j, start = gamma_big, family = familyr, control = glmcontrol)
+          glm.fit(xs_big_j1, ys_big_j, weights=weights_big_j, start = gamma_big, family = familys, control = glmcontrol)
         }
-      } else if ((familyr == "binomial") & (vmethod==0)) {
+      } else if ((familys == "binomial") & (vmethod==0)) {
         xs_big_j1 = cbind(1, xs_big_j)
         sur_big_j = glm.fit(xs_big_j1, ys_big_j, weights=weights_big_j, start = gamma_big, family = binomial(link = "logit"),
                             control = glmcontrol)
-      } else { sur_big_j = glm(ys_big_j ~ xs_big_j, weights=weights_big_j, start = gamma_big, family=familyr)
+      } else { sur_big_j = glm(ys_big_j ~ xs_big_j, weights=weights_big_j, start = gamma_big, family=familys)
       }
 
       gamma_big_j = sur_big_j$coefficients
@@ -718,7 +787,7 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
     jklistval = jklist[1:n_val_id, 1:dim_modt]
     sigma     = (n_val_id - 1) * cov(jklistval[1:n_val_id, 1:dim_mod])
     omega     = (n_val_id - 1) * cov(jklistval)[1:dim_mod, (dim_mod+1):dim_modt]     ## cov between beta_val and (gamma_val - gamma_ful/non)
-    omega_cor =                  cor(jklistval)[1:dim_mod, (dim_mod+1):dim_modt]     ## cov between beta_val and (gamma_val - gamma_ful/non)
+    omega_cor =                  cor(jklistval)[1:dim_mod, (dim_mod+1):dim_modt]     ## cor between beta_val and (gamma_val - gamma_ful/non)
     if (compare==1) {
       jklistdiff = jklist[, (dim_mod +1):dim_modt ]
       jklistgam  = jklist[, (dim_modt+1):(dim_modt+dim_mods)]
@@ -726,11 +795,11 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
       sigma_gam = (jklistrows - 1) * cov( jklistgam )
       vcov_gamma_ful = sigma_gam
     } else {
-      jklistdiffval = jklist[1:n_val              , (dim_mod+1):dim_modt ]
-      jklistdiffnon = jklist[(n_val+1):jklistrows , (dim_mod+1):dim_modt ]
-      jklistgam     = jklist[(n_val+1):jklistrows , (dim_modt+1):(dim_modt+dim_mods)]
-      kappa = (n_val - 1) * cov( jklistdiffval ) + (jklistrows - n_val - 1) * cov( jklistdiffnon )
-      sigma_gam = (jklistrows - n_val - 1) * cov(jklistgam)
+      jklistdiffval = jklist[1:n_val_id              , (dim_mod+1):dim_modt ]
+      jklistdiffnon = jklist[(n_val_id+1):jklistrows , (dim_mod+1):dim_modt ]
+      jklistgam     = jklist[(n_val_id+1):jklistrows , (dim_modt+1):(dim_modt+dim_mods)]
+      kappa = (n_val_id - 1) * cov( jklistdiffval ) + (jklistrows - n_val_id - 1) * cov( jklistdiffnon )
+      sigma_gam = (jklistrows - n_val_id - 1) * cov(jklistgam)
       vcov_gamma_non = sigma_gam
     }
   }
@@ -773,11 +842,11 @@ meerva.fit = function(x_val, y_val, xs_val, ys_val, xs_non, ys_non,
   if (!is.null(id_val)) { ns = cbind(n_val=n_val, n_ful=n_ful, n_val_id, n_ful_id)
   } else { ns = cbind(n_val=n_val, n_ful=n_ful) }
 
-  if (vmethod <= 0) { inputs = cbind( familyr=familyr, compare=compare, comparec=comparec, vmethod=vmethod, vmethodc=vmethodc,
-                                   jksize=jksize, ns, dim_beta=dim_mod, dim_gamma=dim_mods )
-  }  else      { inputs = cbind( familyr=familyr, compare=compare, comparec=comparec, vmethod=vmethod, vmethodc=vmethodc,
-                                 ns, dim_beta=dim_mod, dim_gamma=dim_mods )
-  }
+  if (vmethod >= 1) { jksize = NULL } 
+  if (vmethod == 9) { vmethod = NA } 
+  inputs = cbind( familyr=familyr, familys=familys, compare=compare, comparec=comparec, 
+                  vmethod=vmethod, vmethodc=vmethodc, vmethodr=vmethodr, vmethods=vmethods, 
+                  jksize=jksize, ns, dim_beta=dim_mod, dim_gamma=dim_mods )
 
   names_x  = colnames(x_val)  ; if (familyr != "Cox") { names_x =c("(Intercept)", names_x ) }
   names_xs = colnames(xs_val) ; if (familyr != "Cox") { names_xs=c("(Intercept)", names_xs) }
@@ -836,6 +905,8 @@ ztest = function(estimate, var, names, alpha=0.05, round=NA) {
 #' Summarize Information for a meerva Output Object
 #'
 #' @param object A meerva class object for summary.
+#' @param alpha level for (1-alpha) confidence intervals 
+#' @param round number of decimal places to print for some outputs
 #' @param ... further arguments 
 #'
 #' @return Summarize output
@@ -844,32 +915,19 @@ ztest = function(estimate, var, names, alpha=0.05, round=NA) {
 #' 
 #' @importFrom stats qnorm pnorm 
 #'
-summary.meerva = function(object, ...) {
+summary.meerva = function(object, alpha=0.05, round=NA, ...) {
   compare= object$FitInput[2]
   
   cat(paste0("\n"))
   print(object$Call) ; cat(paste0("\n"))
   print(object$FitInput) ; cat(paste0("\n"))
-  #  cat(paste0(object$FitInput)) ; cat(paste0("\n"))
-  
-  ztest = function(estimate, var, names, alpha=0.05) { # estimate = object$coef_beta[1,] ; var=object$var_beta[1,] ; names = object$names_x ;
-    estimate = as.vector(estimate)
-    se = as.vector(sqrt(var))
-    lcl = estimate + qnorm(alpha/2) * se
-    ucl = estimate - qnorm(alpha/2) * se
-    z = estimate/se
-    p = 2*pnorm(-abs(z))
-    summary = cbind(estimate, se, lcl, ucl, z, p)
-    rownames(summary) = names
-    print(summary)
-    cat(paste0("\n"))
-  }
+  cat(paste0(" Confidence intervals are for alpha = ", alpha, "\n\n")) 
   
   cat(paste0(" Estimates for Beta using beta_aug (references augmented with surrogates)\n"))
-  ztest(object$coef_beta[1,], object$var_beta[1,], object$names_x )
+  ztest(object$coef_beta[1,], object$var_beta[1,], object$names_x, alpha=alpha, round=round )
   
   cat(paste0(" Estimates for Beta using beta_val (references alone\n"))
-  ztest( object$coef_beta[2,], object$var_beta[2,], object$names_x )
+  ztest( object$coef_beta[2,], object$var_beta[2,], object$names_x, alpha=alpha, round=round )
   
   cat(paste0(" Effective multiplicative increase in sample size by using augmented estimates\n"))
   Increase = object$var_beta[2,]/ object$var_beta[1,]
@@ -879,7 +937,7 @@ summary.meerva = function(object, ...) {
   if (compare==1) { cat(paste0(" Estimates for Gamma using gamma_ful (surrogates alone)\n not for direct comparisons \n"))
   }   else        { cat(paste0(" Estimates for Gamma using gamma_non (surrogates alone)\n not for direct comparisons \n"))
   }
-  ztest( object$coef_gamma[1,], object$var_gamma[1,], object$names_xs )
+  ztest( object$coef_gamma[1,], object$var_gamma[1,], object$names_xs, alpha=alpha, round=round )
   
   if (compare==1) { cat(paste0(" Correlations between beta_val and (gamma_val - gamma_ful)  \n"))
   }   else        { cat(paste0(" Correlations between beta_val and gamma_val \n"))
@@ -895,6 +953,8 @@ summary.meerva = function(object, ...) {
 #' Print Minimal Summary Information for a meerva Output Object
 #'
 #' @param x A meerva class object for printing 
+#' @param alpha level for (1-alpha) confidence intervals 
+#' @param round number of decimal places to print for some outputs
 #' @param ... further arguments 
 #'
 #' @return Print output
@@ -903,28 +963,13 @@ summary.meerva = function(object, ...) {
 #' 
 #' @importFrom stats qnorm pnorm 
 #'
-print.meerva = function(x, ...) {
-  compare= x$FitInput[2]
-  
+print.meerva = function(x, alpha=0.05, round=NA, ...) {
   cat(paste0("\n"))
   print(x$Call) ; cat(paste0("\n"))
   print(x$FitInput) ; cat(paste0("\n"))
-  #  cat(paste0(x$FitInput)) ; cat(paste0("\n"))
-  
-  ztest = function(estimate, var, names, alpha=0.05) { # estimate = x$coef_beta[1,] ; var=x$var_beta[1,] ; names = x$names_x ;
-    estimate = as.vector(estimate)
-    se = as.vector(sqrt(var))
-    lcl = estimate + qnorm(alpha/2) * se
-    ucl = estimate - qnorm(alpha/2) * se
-    z = estimate/se
-    p = 2*pnorm(-abs(z))
-    summary = cbind(estimate, se, lcl, ucl, z, p)
-    rownames(summary) = names
-    print(summary)
-    cat(paste0("\n"))
-  }
+  cat(paste0(" Confidence intervals are for alpha = ", alpha, "\n\n"))   
   cat(paste0(" Estimates for Beta using beta_aug \n"))
-  ztest(x$coef_beta[1,], x$var_beta[1,], x$names_x )
+  ztest(x$coef_beta[1,], x$var_beta[1,], x$names_x, alpha=alpha, round=round )
 }
 
 ##############################################################################################################################
@@ -935,7 +980,6 @@ print.meerva = function(x, ...) {
 #' @param dfbeta    dfbeta s for sandwich
 #'
 #' @return dfbeta by id_vector clusters
-#'
 #'
 dfbetac = function(id_vector, dfbeta) {
   n_indeces = sum( table(table(id_vector)) )
@@ -974,7 +1018,7 @@ dfbetac = function(id_vector, dfbeta) {
 #' with measurement error when there is a
 #' validation subsample.  The functional .fit program is meerva.fit. The meerva function
 #' is intended for future development and use as a wrapper for meerva.fit.
-#' Please help(meerva.fit).
+#' Try help(meerva.fit).
 #'
 #' @author Walter Kremers (kremers.walter@mayo.edu)
 #'

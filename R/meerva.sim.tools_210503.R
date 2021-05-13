@@ -1,5 +1,5 @@
 #======================================================================================================
-#======= meerva.sim.tools_210424                                                               ========
+#======= meerva.sim.tools_210503.R                                                               ========
 #======================================================================================================
 #' Simulation of meerva used to Analyze Data with Measurement Error
 #' 
@@ -11,18 +11,18 @@
 #'  error are available for this randomly chosen subsample of the full sample.  
 #'  Measurement errors may be differential or non differential, in any or all 
 #'  predictors (simultaneously) as well as outcome.   
-#'       
-#' The meerva.sim.block lets the user specify a model with measurement error, 
-#' and then simulate and analyze many datasets to 
-#' examine the model fits and judge how the method works.
-#' Data sets are generated according to 3 functions for simulating
-#' Cox PH, linear and logistic regression models.  These functions generate 
-#' data sets with 4 reference predictor variables and from 3 to 5 surrogate 
-#' predictor variables.  The user can 
-#' consider, program and simulate data sets of greater complexity
-#' but these examples provided with the package should serve as a 
-#' reasonable introduction to the robustness of the method.  
-#'
+#' 
+#'  The meerva.sim.block lets the user specify a model with measurement error, 
+#'  and then simulate and analyze many datasets to 
+#'  examine the model fits and judge how the method works.
+#'  Data sets are generated according to 3 functions for simulating
+#'  Cox PH, linear and logistic regression models.  These functions generate 
+#'  data sets with 4 reference predictor variables and from 3 to 5 surrogate 
+#'  predictor variables.  The user can 
+#'  consider, program and simulate data sets of greater complexity
+#'  but these examples provided with the package should serve as a 
+#'  reasonable introduction to the robustness of the method.  
+#' 
 #' @param simfam The family for the underlying regression model 
 #' to be simulated, amongst "binomial", "gaussian" and "Cox".
 #' @param nsims Number of datasets to be simulated 
@@ -56,6 +56,10 @@
 #'   Roughly, bx3s2[1] takes the previously determined mean for x3s1 
 #'   using bx3s1 and multiples by bx3s2[1].
 #'   Conditional on x3, x3s2 has mean  bx3s2[2] * x3 and variance bx3s2[3]. 
+#' @param bx12 Bernoulli probabilities for reference variables x1 and x2.  
+#'   A vector of length 2, default is c(0.25, 0.15).  If mncor (see below)
+#'   is positive the correlations between these Bernoulli and continuous
+#'   predictors remains positive.   
 #' @param sd In case of simfam == "gaussain" for linear regression, the sd of outcome y. 
 #'   In case of simfam == "Cox" for Cox PH regression, the multiplicative error 
 #'   term for ys, the surrogate for the time to event y 
@@ -66,6 +70,12 @@
 #'   variables.  If bx3s2 is specified such that there are 
 #'   duplicate surrogate variables for the reference variable x3 
 #'   then the number of surrogate predictors will not be reduced.
+#' @param mncor Correlation of the columns in the x matrix before 
+#'   x1 and x2 are dichotomized to Bernoulli random variables. 
+#'   Default is 0.
+#' @param sigma A 4x4 varaince-covarniance matrix for the 
+#'   multivarite normal dsitribution used to derive the 4 
+#'   reference predictor variables.
 #' @param vmethod Method for robust estimation of variance covariance matrices needed 
 #'   for calculation of the augmented estimates (beta aug).
 #'   0 for JK or jackknife (slowest but more accurate), 
@@ -74,8 +84,16 @@
 #'   3 for all three of these methods to be used
 #'   NA to let the program choose a stronger, faster method.
 #' @param jksize leave out number for grouped jackknife used for non validation data 
-#'   The default is 0 where the program chooses jksize so that the number of leave out groups is about validation subsample size.
+#'   The default is 0 where the program chooses jksize so that the number of leave out 
+#'   groups is about validation subsample size.
 #' @param compare 1 to compare gamma_val with gamma_ful (default) or 0 with gamma_non.
+#' @param diffam inidcates a cutoff if for a "guassian" family in surrogate a "binomial" 
+#'   famliy is to be similated for the refernce model.  For example, the
+#'   surrogate outcome could be an estimated probit (or logit) based upon
+#'   a convolutional neural network. Normal data are simulated and
+#'   y_val is repalced by 1*(y_val >= diffam).  Default is NA and
+#'   the surrogate and reference have the same model form.  Only 
+#'   for use with vmethod of 0 or 1.   
 #'
 #'@author Walter Kremers (kremers.walter@mayo.edu)
 #'
@@ -162,7 +180,8 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
       alpha2 = c(0.98,0.94,0.95,0.95) , 
       bx3s1 =c(0.05, 0, 0, NA, NA) , 
       bx3s2 = c(NA,NA,NA) , 
-      sd=1 , fewer=0, vmethod=NA , jksize=0 , compare=1) {
+      bx12=c(0.25, 0.15) , 
+      sd=1 , fewer=0, mncor=0, sigma=NULL , vmethod=NA , jksize=0 , compare=1, diffam=NA ) {
 
   if (seed == 0) { seed = round(runif(1)*1000000000) }
   set.seed(seed) ; 
@@ -179,12 +198,15 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
   if ( is.na(simfam) ) { simfam = "gaussian" }  
   if (simfam %in% c("gausian" , "gause")) { simfam = "gaussian" } 
   
+  if (is.na(mncor)) { mncor = 0 }
+  mncor = min(1,max(mncor,0))
+  
   for (nsim in 1:nsims) {
     if (nsim == 1)  { cat(" before ", nsim, " of ", nsims, " iterations ", timestamp(), "\n") }  
     
-    if ( simfam == "binomial" ) { simd = meerva.sim.brn(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, fewer=fewer) }  
-    if ( simfam == "gaussian" ) { simd = meerva.sim.nrm(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, sd=sd, fewer=fewer) } 
-    if ( simfam == "Cox"      ) { simd = meerva.sim.cox(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, sd=sd, fewer=fewer) }  
+    if ( simfam == "binomial" ) { simd = meerva.sim.brn(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, bx12=bx12, fewer=fewer, mncor=mncor, sigma=sigma) }  
+    if ( simfam == "gaussian" ) { simd = meerva.sim.nrm(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, bx12=bx12, sd=sd, fewer=fewer, mncor=mncor, sigma=sigma) } 
+    if ( simfam == "Cox"      ) { simd = meerva.sim.cox(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, bx12=bx12, sd=sd, fewer=fewer, mncor=mncor, sigma=sigma) }  
 #    if ( simfam == "test1"    ) { simd = meerva.sim.test(n, m, beta, alpha1, alpha2, opt=1) } 
 #    if ( simfam == "test2"    ) { simd = meerva.sim.test(n, m, beta, alpha1, alpha2, opt=2) }     
     
@@ -194,7 +216,12 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
     ys_val = simd$ys_val
     xs_non = simd$xs_non
     ys_non = simd$ys_non
-
+    if ((simfam == "gaussian") & (!is.na(diffam[1]))) { 
+      ys_val = 1 * (ys_val >= diffam)
+      ys_non = 1 * (ys_non >= diffam) 
+      if (nsim==1) { tmp = round(mean(ys_non),3) ; cat(' mean yx_non about ', tmp, "\n") } 
+    }
+     
     if ( simfam == "Cox" ) {
       e_val  = simd$e_val
       es_val = simd$es_val
@@ -204,18 +231,28 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
     if (vmethod %in% c(0, 3)) {
       if ( simfam == "Cox" ) {
         meerva.0 <- meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, 
-                                     familyr="Cox", e_val, es_val, es_non, vmethod=vmethod, jksize=jksize, compare=compare )  
-      } else {meerva.0 <- meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, vmethod=vmethod, jksize=jksize, compare=compare) }
-    }
+                                     familyr="Cox", e_val, es_val, es_non, vmethod=0, jksize=jksize, compare=compare )  
+      } else if ((simfam == "gaussian") & (!is.na(diffam[2])) & (diffam[2]==0) ) {
+        meerva.0 <- meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, familyr="gaussian", familys="gaussian", 
+                               vmethod=0, jksize=jksize, compare=compare) 
+      } else {meerva.0 <- meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, vmethod=0, jksize=jksize, compare=compare) 
+      }
+    } 
+    
     if (vmethod %in% c(1, 3)) {
       if (simfam == "Cox") {
         meerva.1 <- meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non,  
                                familyr="Cox", e_val, es_val, es_non, vmethod=1, jksize=jksize, compare=compare )  
+      } else if ((simfam == "gaussian") & (!is.na(diffam[2])) & (diffam[2]==0)) {
+        meerva.1 <- meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, familyr="gaussian", familys="gaussian", 
+                              jksize=jksize, compare=compare )
       } else { meerva.1 = meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, vmethod=1, jksize=jksize, compare=compare) }
     }
+    
     if (vmethod %in% c(2, 3)) {
-        meerva.2 = meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, vmethod=2, jksize=jksize, compare=compare) 
+     meerva.2 = meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, vmethod=2, jksize=jksize, compare=compare) 
     }
+    
     if ( (nsim %in% c(1, 10, 50)) | (((nsim %% 100) == 0) & (nsim<=1000)) | (((nsim %% 1000) == 0) & (nsim<=10000)) | (nsim == nsims) ) { 
       cat(" after ", nsim, " of ", nsims, " iterations ", timestamp(), "\n")  
     } 
@@ -247,8 +284,8 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
     } 
   }
   
-  listname=list(simfam=simfam, vmethod=vmethod, jksize=jksize, compare=compare, nsims=nsims, seed=seed, nm=c(n,m),   
-                beta=beta, alpha1=alpha1, alpha2=alpha2, bx3s1=bx3s1, bx3s2=bx3s2, sd=sd, 
+  listname=list(simfam=simfam, mncor=mncor, vmethod=vmethod, jksize=jksize, compare=compare, nsims=nsims, seed=seed, nm=c(n,m),   
+                beta=beta, alpha1=alpha1, alpha2=alpha2, bx3s1=bx3s1, bx3s2=bx3s2, bx12=bx12, sd=sd, mncor=mncor, sigma=sigma,
       beta_augs       = beta_augs      , beta_vals      = beta_vals ,
       beta_aug_vars   = beta_aug_vars  , beta_val_vars  = beta_val_vars, 
       gamma_bigs      = gamma_bigs     , gamma_vals     = gamma_vals,
@@ -286,8 +323,9 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
 #'
 summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   
-  listnamex <-deparse(substitute(object))                          ## How to get object name ??
-  simfam  = object$simfam    
+  listnamex = deparse(substitute(object))                        
+  simfam  = object$simfam   
+  mncor   = object$mncor 
   vmethod = object$vmethod    
   jksize = object$jksize 
   compare= object$compare 
@@ -299,6 +337,10 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   alpha2 = object$alpha2 
   bx3s1  = object$bx3s1
   bx3s2  = object$bx3s2
+  bx12   = object$bx12 
+  sd     = object$sd
+  mncor  = object$mncor
+  sigma  = object$sigma
   beta_augs   = object$beta_augs       
   beta_vals   = object$beta_vals 
   gamma_vals  = object$gamma_vals 
@@ -316,10 +358,11 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   cat( "\n") ;   
   cat( "======================= Simulation parameters ===================================================\n\n" ) ; 
   
-  names(listnamex)  = c("list name =") ; print(listnamex) ; cat("\n") ; 
-  #cat("list name = ") ; print(listnamex) ; 
+#  names(listnamex)  = c("list name =") ; print(listnamex) ; cat("\n") ; 
+  cat("list name = " , listnamex, "\n\n" ) ; 
   # names(simfam) = c("glm family for analysis") ; print( simfam ) ; cat( "\n" ) ;  
   cat(paste0("R glm family = ", simfam, "\n\n"))
+  cat(paste0("mncor = ", mncor, "\n\n"))
   cat(paste0("VCOV method vmethod =  ", vmethod))  
   if (vmethod==0) { cat(paste0(" , JK")) 
   } else if (vmethod<=1) { cat(paste0(" , dfbeta"))
@@ -330,7 +373,7 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   if (vmethod %in% c(0,3) ) { cat(paste0("jksize =  ", jksize, "\n\n"))  }
   cat(paste0("Comparison group =  ", compare)) 
   if (compare==1) { cat(paste0(" , ful")) } else if (compare==0) { cat(paste0(" , non"))  } ; cat(paste0("\n\n"))
-  cat(paste0("Nuber of simulations = ", nsims, "\n\n")) ;
+  cat(paste0("Number of simulations = ", nsims, "\n\n")) ;
   cat(paste0("seed = ", seed, "\n\n"))  
   cat(paste0("Full and val sample sizes of ", nm[1], " and ", nm[2], "\n\n"))
   print(rbind(beta)) ; cat( "\n") ; 
@@ -338,7 +381,11 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   print(rbind(alpha2)) ; cat( "\n") ; 
   print(rbind(bx3s1)) ;  cat( "\n") ; 
   print(rbind(bx3s2)) ; cat( "\n") ; 
-  #print(bx3s2) ; cat( "\n") ; 
+  if ("bx12" %in% names(object))  {print(rbind(bx12)) ; cat( "\n") ; }
+#  if ("sd"   %in% names(object))  
+  cat(paste0(" SD = ", sd, "\n\n")) 
+  cat(paste0(" mncor = ", mncor, "\n\n")) 
+  if (!is.null(sigma)) {print(sigma) ; cat( "\n") ; } 
   
   #===================================================================================================
   #====================== Estimate Averages  =========================================================
@@ -495,7 +542,7 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
     if (vmethod==3) {   cat( " Coverage for beta_aug_1 95% CI \n" ) ;
       print( coverage(beta_aug_1s, beta_aug_1_vars, beta) ) ; cat( "\n") ; }
     
-    if ((vmethod==3) & (simfam!="Cox")) {   cat( " Coverage for beta_aug_2 95% CI \n" ) ;
+    if ((vmethod==3) & (simfam!="Cox")) { cat( " Coverage for beta_aug_2 95% CI \n" ) ;
       print( coverage(beta_aug_2s, beta_aug_2_vars, beta) ) ; cat( "\n") ; }
   
     cat( " Coverage for beta_val 95% CI \n" ) ;  
@@ -519,8 +566,10 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
     print(tabel) ; cat("\n") ; 
   } else if  (short==1)  { 
     cat( "=========== Bias, SD and MSE for estimators ===================================================\n\n" )  
-    tabel1 = rbind(biasbeta, sdbeta, rmsebeta) ;
-    tabel2 = rbind(biasgamma, sdgamma, rmsegamma) ;    
+    if (!is.na(round)) { tabel1 = rbind(round(biasbeta,round), round(sdbeta,round), round(rmsebeta,round)) 
+    } else { tabel1 = rbind(biasbeta, sdbeta, rmsebeta) }
+    if (!is.na(round)) { tabel2 = rbind(round(biasgamma,round), round(sdgamma,round), round(rmsegamma,round)) 
+    } else { tabel2 = rbind(biasgamma, sdgamma, rmsegamma) } 
     print(tabel1) ; print(tabel2) ; cat("\n") ; 
   }
   
@@ -572,7 +621,7 @@ compmse = function( ibias, ivals ) {
 } 
 
 #########################################################################################################
-#========== Define function to do 1-sample t-test on each colum of a matrix ============================#
+#========== Define function to do 1-sample t-test on each column of a matrix ===========================#
 
 #' A simple summary description 
 #'
@@ -637,14 +686,12 @@ coverage <- function(estimates, vars, beta, round=3) {
 ###############################################################################################
 #========== compare coverage probabilities ===================================================#
 
-#' Compare coverage probabilities between two estimators
+#' Compare coverage probabilities between two estimators on matched simulations 
 #'
 #' @param estimates1 Matrix of estimates for 1 
 #' @param vars1 Matrix of vars for 1 
 #' @param estimates2 Matrix of estimates for 2 
 #' @param vars2 Matrix of vars for 2 
-#' @param beta 
-#' @param round 
 #' @param beta The beta under H0
 #' @param round The decimal places for rounding
 #' 
@@ -714,18 +761,18 @@ plot.meerva.sim = function(x, violin=0, ...) {
     betas <- tidyr::pivot_longer(betas, names_to="Group", values_to="Value", cols= names(betas))
     
     betas$Group <- ifelse(betas$Group == "(Intercept)", "B0",
-                          ifelse(betas$Group %in% c("x_valx1", "xs_nonx1s", "xs_nonx1s" , "xs_fulx1s", "xs_fulx1s" ), "B1",
-                                 ifelse(betas$Group %in% c("x_valx2", "xs_nonx2" , "xs_nonx2", "xs_valx2" , "xs_fulx2"  ), "B2",
-                                        ifelse(betas$Group %in% c("xs_fulx3s2", "xs_nonx3s2"), "B3d",                        
-                                               ifelse(betas$Group %in% c("x_valx3", "xs_valx3s", "xs_nonx3s", "xs_nonx3s1", "xs_fulx3s", "xs_fulx3s1"), "B3",
-                                                      ifelse(betas$Group %in% c("x_valx4", "xs_valx4", "xs_fulx4", "xs_nonx4"), "B4" , "B5"))))))
+                   ifelse(betas$Group %in% c("x_valx1", "xs_nonx1s", "xs_fulx1s" ), "B1",
+                   ifelse(betas$Group %in% c("x_valx2", "xs_nonx2"  , "xs_nonx2s", "xs_fulx2" , "xs_fulx2s"), "B2",
+                   ifelse(betas$Group %in% c("xs_fulx3s2", "xs_nonx3s2"), "B3d",                        
+                   ifelse(betas$Group %in% c("x_valx3", "xs_nonx3s", "xs_nonx3s1", "xs_fulx3s", "xs_fulx3s1"), "B3",
+                   ifelse(betas$Group %in% c("x_valx4", "xs_nonx4"  , "xs_nonx4s", "xs_fulx4"  , "xs_fulx4s"), "B4" , "B5"))))))
 
     if        (item==1) { betas$var = "beta_aug"  
     } else if (item==2) { betas$var = "beta_val"  
     } else if (item==3) { betas$var = "gamma_ful" 
     } else if (item==4) { betas$var = "gamma_non" 
     }  
-    return(betas)
+    return(betas) 
   }  
   
   beta_aug  = fun01(x,1)
@@ -762,7 +809,6 @@ plot.meerva.sim = function(x, violin=0, ...) {
   } else {
     ggplot2::ggplot(data = plotdata, ggplot2::aes(x = Group, y = Value, fill = var)) +
       ggplot2::geom_hline(yintercept = 0, col = "lightgrey") +
-      #ggplot2::geom_boxplot(notch = TRUE) +
       ggplot2::geom_violin() +
       ggplot2::theme_classic() +
       ggplot2::theme(panel.border = ggplot2::element_rect(color = "black", fill = NA), 
