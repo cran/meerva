@@ -2,6 +2,7 @@
 
 S3method(plot,meerva.sim)
 S3method(print,meerva)
+S3method(print,meerva.sim)
 S3method(summary,meerva)
 S3method(summary,meerva.sim)
 export(meerva)

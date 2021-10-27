@@ -94,6 +94,8 @@
 #'   y_val is repalced by 1*(y_val >= diffam).  Default is NA and
 #'   the surrogate and reference have the same model form.  Only 
 #'   for use with vmethod of 0 or 1.   
+#' @param simtime 1 (default) to print out time duirng simulalation to inform user how long the
+#'   simulation may run, 0 to not print out this information.  
 #'
 #'@author Walter Kremers (kremers.walter@mayo.edu)
 #'
@@ -126,7 +128,7 @@
 #'     nsims=10, seed=0, n=4000, m=400, 
 #'     beta = c(-0.5, 0.5, 0.2, 1, 0.5) , 
 #'     alpha1 = c(0.95, 0.90, 0.90, 0.95), 
-#'     alpha2 = c(0.98,0.94,0.95,0.95), 
+#'     alpha2 = c(0.98,0.98,0.95,0.95), 
 #'     bx3s1=c(0.05, 0, 0, NA, NA) , 
 #'     bx3s2 = c(NA,NA,NA) , 
 #'     vmethod=2, jksize=0, compare=1) 
@@ -177,11 +179,12 @@
 meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400, 
       beta = c(-0.5, 0.5, 0.2, 1, 0.5) , 
       alpha1 = c(-0.05, 0.1, 0.05, 0.1) , 
-      alpha2 = c(0.98,0.94,0.95,0.95) , 
+      alpha2 = c(0.98,0.98,0.95,0.95) , 
       bx3s1 =c(0.05, 0, 0, NA, NA) , 
-      bx3s2 = c(NA,NA,NA) , 
+      bx3s2 = c(0.95,NA,NA) , 
       bx12=c(0.25, 0.15) , 
-      sd=1 , fewer=0, mncor=0, sigma=NULL , vmethod=NA , jksize=0 , compare=1, diffam=NA ) {
+      sd=1 , fewer=0, mncor=0, sigma=NULL , vmethod=NA , jksize=0 , compare=1, diffam=NA,
+      simtime = 1 ) {
 
   if (seed == 0) { seed = round(runif(1)*1000000000) }
   set.seed(seed) ; 
@@ -202,7 +205,7 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
   mncor = min(1,max(mncor,0))
   
   for (nsim in 1:nsims) {
-    if (nsim == 1)  { cat(" before ", nsim, " of ", nsims, " iterations ", timestamp(), "\n") }  
+    if ((simtime == 1) & (nsim == 1) ) { cat(" before ", nsim, " of ", nsims, " iterations ", timestamp(), "\n") }  
     
     if ( simfam == "binomial" ) { simd = meerva.sim.brn(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, bx12=bx12, fewer=fewer, mncor=mncor, sigma=sigma) }  
     if ( simfam == "gaussian" ) { simd = meerva.sim.nrm(n, m, beta, alpha1, alpha2, bx3s1, bx3s2, bx12=bx12, sd=sd, fewer=fewer, mncor=mncor, sigma=sigma) } 
@@ -253,7 +256,7 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
      meerva.2 = meerva.fit(x_val, y_val, xs_val, ys_val, xs_non, ys_non, vmethod=2, jksize=jksize, compare=compare) 
     }
     
-    if ( (nsim %in% c(1, 10, 50)) | (((nsim %% 100) == 0) & (nsim<=1000)) | (((nsim %% 1000) == 0) & (nsim<=10000)) | (nsim == nsims) ) { 
+    if ( (simtime == 1)  & ( (nsim %in% c(1, 10, 50)) | (((nsim %% 100) == 0) & (nsim<=1000)) | (((nsim %% 1000) == 0) & (nsim<=10000)) | (nsim == nsims) ) ) { 
       cat(" after ", nsim, " of ", nsims, " iterations ", timestamp(), "\n")  
     } 
   
@@ -319,13 +322,12 @@ meerva.sim.block = function(simfam="gaussian", nsims=100, seed=0, n=4000, m=400,
 #' @export
 #' 
 #' @seealso 
-#'   \code{\link{meerva.sim.block}} 
+#'   \code{\link{meerva.sim.block}}  , \code{\link{print.meerva.sim}} 
 #'
 summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   
   listnamex = deparse(substitute(object))                        
   simfam  = object$simfam   
-  mncor   = object$mncor 
   vmethod = object$vmethod    
   jksize = object$jksize 
   compare= object$compare 
@@ -356,13 +358,12 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
                                     beta_aug_2_vars = object$beta_aug_2_vars }
 
   cat( "\n") ;   
-  cat( "======================= Simulation parameters ===================================================\n\n" ) ; 
+  cat( "======================= Simulation parameters ==================================\n\n" ) ; 
   
 #  names(listnamex)  = c("list name =") ; print(listnamex) ; cat("\n") ; 
   cat("list name = " , listnamex, "\n\n" ) ; 
   # names(simfam) = c("glm family for analysis") ; print( simfam ) ; cat( "\n" ) ;  
   cat(paste0("R glm family = ", simfam, "\n\n"))
-  cat(paste0("mncor = ", mncor, "\n\n"))
   cat(paste0("VCOV method vmethod =  ", vmethod))  
   if (vmethod==0) { cat(paste0(" , JK")) 
   } else if (vmethod<=1) { cat(paste0(" , dfbeta"))
@@ -387,8 +388,8 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   cat(paste0(" mncor = ", mncor, "\n\n")) 
   if (!is.null(sigma)) {print(sigma) ; cat( "\n") ; } 
   
-  #===================================================================================================
-  #====================== Estimate Averages  =========================================================
+  #===================================================================================
+  #====================== Estimate Averages  =========================================
 
 #  beta
   if (simfam == "Cox") { beta = beta[2:length(beta)]  }
@@ -415,8 +416,8 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   gamma_val_true  = subvec(gamma_vals, betag)  ;  gamma_val_mse = colMeans(gamma_val_true^2  ) 
   
   if (short == 0) {
-    cat( "================================================================================================\n" ) ; 
-    cat( "======================= Estimate averages ======================================================\n\n" ) ; 
+    cat( "================================================================================\n" ) ; 
+    cat( "======================= Estimate averages ======================================\n\n" ) ; 
     
     aves = rbind(beta=beta, beta_val=colMeans(beta_vals), beta_aug=colMeans(beta_augs))
     if  (vmethod==3) { aves = rbind(aves, beta_aug_1=colMeans(beta_aug_1s))  }
@@ -427,7 +428,7 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
     }   else        { print( rbind(gamma_non=colMeans(gamma_bigs ), gamma_val=colMeans(gamma_vals) ) ) }
     cat( "\n") ;     
   }
-#======================= Bias ===================================================================; 
+#======================= Bias ===================================================; 
   
   biasbeta = rbind(beta_val_bias=colMeans(beta_val_true), beta_aug_bias=colMeans(beta_aug_true)) 
   if (vmethod==3) { biasbeta = rbind(biasbeta, beta_aug_1_bias=colMeans(beta_aug_1_true)) }
@@ -437,11 +438,11 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   }   else        { biasgamma = rbind(gamma_non_bias=colMeans(gamma_big_true ), gamma_val_bias=colMeans(gamma_val_true) ) }
   
   if (short == 0) {
-    cat( "======================= Bias ===================================================================\n\n" ) ; 
+    cat( "======================= Bias ===================================================\n\n" ) ; 
     print( biasbeta ) ;  cat( "\n") ; 
     print( biasgamma) ;  cat( "\n") ; 
   }
-#======================= Standard Deviations ===================================================\n\n" ) ; 
+#======================= Standard Deviations ===================================\n\n" ) ; 
  
   sdbeta = rbind( beta_val_sd =apply(beta_vals ,2,stats::sd), beta_aug_sd =apply(beta_augs, 2,stats::sd) )  
   if (vmethod==3) { sdbeta = rbind( sdbeta, beta_aug_1_sd =apply(beta_aug_1s, 2,stats::sd) )  } 
@@ -451,11 +452,11 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   }  else         { sdgamma = rbind( gamma_non_sd=apply(gamma_bigs,2,stats::sd), gamma_val_sd=apply(gamma_vals,2,stats::sd) ) }
   
   if (short == 0) {
-    cat( "======================= Standard Deviations ===================================================\n\n" ) ;   
+    cat( "======================= Standard Deviations ====================================\n\n" ) ;   
     print( sdbeta ) ;  cat( "\n") ; 
     print( sdgamma) ;  cat( "\n") ; 
   }
-#======================= Average Standard Errors  ===============================================# 
+#======================= Average Standard Errors  ===============================# 
   
   sebeta = rbind( beta_val_sd=colMeans(sqrt(beta_val_vars)), beta_aug_sd =colMeans(sqrt(beta_aug_vars)) ) 
   if (vmethod==3) { sebeta = rbind( sebeta, beta_aug_1_sd =colMeans(sqrt(beta_aug_1_vars)) ) }   
@@ -465,14 +466,14 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   }   else        { segamma = sqrt( rbind( gamma_non_sdj=colMeans(gamma_big_varjs), gamma_val_sd=colMeans(gamma_val_vars), gamma_non_sd=colMeans(gamma_big_vars) ) ) }
   
   if (short == 0) {
-    cat( "======================= Average Standard Errors  ===============================================\n\n" ) ;   
+    cat( "======================= Average Standard Errors  ===============================\n\n" ) ;   
     print( sebeta  ) ; cat( "\n" )
     print( segamma ) ; cat( "\n" )
   }
   
   if (short == -1) {
-    cat( "================================================================================================\n" ) ; 
-    cat( "============= Check consistency of MSE, bias and var of estimates ==============================\n\n" ) ; 
+    cat( "================================================================================\n" ) ; 
+    cat( "============= Check consistency of MSE, bias and var of estimates ==============\n\n" ) ; 
   
     cat( "  beta_aug \n" ) ; 
     print( compmse( beta_aug_true ,  ivals = beta_augs ) ) ; cat( "\n") ;    ## is.vector(beta_val_true) ; is.matrix(beta_val_true)
@@ -485,8 +486,8 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
     print( compmse( gamma_val_true ,  ivals = gamma_vals ) ) ; cat( "\n") ;  
   }
   
-#================================================================================================ 
-#======================= Square Root MSEs =======================================================
+#================================================================================ 
+#======================= Square Root MSEs =======================================
 
   rmsebeta = rbind(beta_val_rmse=beta_val_mse, beta_aug_rmse=beta_aug_mse)  
   if  (vmethod==3) { rmsebeta = rbind(rmsebeta, beta_aug_1_rmse=beta_aug_1_mse) }  
@@ -497,15 +498,15 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   }  else         { rmsegamma = sqrt( rbind(gamma_non_rmse=gamma_big_mse, gamma_val_rmse=gamma_val_mse) )  }
   
   if (short == 0) {
-    cat( "================================================================================================\n" ) 
-    cat( "======================= Square Root MSEs =======================================================\n\n" ) ;  
+    cat( "================================================================================\n" ) 
+    cat( "======================= Square Root MSEs =======================================\n\n" ) ;  
     print( rmsebeta ) ;  cat( "\n") ; 
     print( rmsegamma) ;  cat( "\n") ; 
   }
 
   if (short == 0) {
-    cat( "================================================================================================\n" ) 
-    cat( "======================= Compare means and squared errors =======================================\n\n" ) ;
+    cat( "================================================================================\n" ) 
+    cat( "======================= Compare means and squared errors =======================\n\n" ) ;
   
     beta_aug_val_mse   = beta_aug_true^2     - beta_val_true^2
     if (vmethod==3) { beta_aug_aug_1_mse = beta_aug_true^2 - beta_aug_1_true^2 } 
@@ -533,8 +534,8 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
     print( myttest(gamma_big_true) ) ; cat( "\n") ;
   }
   if (short == 0) {
-    cat( "================================================================================================\n" ) 
-    cat( "======== beta and gamma 95% Confidence Interval coverage probabilities =========================\n\n" ) ; 
+    cat( "================================================================================\n" ) 
+    cat( "======== beta and gamma 95% Confidence Interval coverage probabilities =========\n\n" ) ; 
 
     cat( " Coverage for beta_aug 95% CI \n" ) ;
     print( coverage(beta_augs, beta_aug_vars, beta) ) ; cat( "\n") ;## estimates=beta_augs ; vars = beta_aug_vars ; 
@@ -559,13 +560,13 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
   }
 
   if ( (short==1)  &  (dim(biasbeta)[2] == dim(biasgamma)[2]) ) { 
-    cat( "=========== Bias, SD and MSE for estimators ===================================================\n\n" )  
+    cat( "=========== Bias, SD and MSE for estimators ===================================\n\n" )  
     if (!is.na(round)) { tabel = rbind(round(biasbeta,round), round(biasgamma,round), round(sdbeta,round),
                                        round(sdgamma,round), round(rmsebeta,round), round(rmsegamma,round))  
     } else { tabel = rbind(biasbeta, biasgamma, sdbeta, sdgamma, rmsebeta, rmsegamma) } 
     print(tabel) ; cat("\n") ; 
   } else if  (short==1)  { 
-    cat( "=========== Bias, SD and MSE for estimators ===================================================\n\n" )  
+    cat( "=========== Bias, SD and MSE for estimators ===================================\n\n" )  
     if (!is.na(round)) { tabel1 = rbind(round(biasbeta,round), round(sdbeta,round), round(rmsebeta,round)) 
     } else { tabel1 = rbind(biasbeta, sdbeta, rmsebeta) }
     if (!is.na(round)) { tabel2 = rbind(round(biasgamma,round), round(sdgamma,round), round(rmsegamma,round)) 
@@ -573,9 +574,31 @@ summary.meerva.sim <- function(object, short=0, round=NA, ...) {
     print(tabel1) ; print(tabel2) ; cat("\n") ; 
   }
   
-  cat( "================================================================================================\n\n" )  
+  cat( "================================================================================\n\n" )  
 } 
 
+##############################################################################################################################
+##############################################################################################################################
+#=========== summarize simulation results =========================================================================;
+
+#' Print Information for a meerva.sim Simulation Study Output Object (alias for summary.meerva.fit())
+#'
+#' @param x Output object from the simulations study program meerva.sim.block
+#' @param short 0 to produce extensive output summary, 1 to produce only a table of biases and MSEs
+#' @param round number of decimal places to round to in some tables, NA for R default
+#' @param ... further arguments 
+#'
+#' @return A summary print 
+#' 
+#' @export
+#' 
+#' @seealso 
+#'   \code{\link{meerva.sim.block}} , \code{\link{summary.meerva.sim}} 
+#'
+print.meerva.sim <- function(x, short=0, round=NA, ...) {
+  summary.meerva.sim(object=x, short=short, round=round, ...)
+}
+  
 ##############################################################################################################################
 ##############################################################################################################################
 
